@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: mitch-os-88-backend
+    runtime: docker
+    plan: starter
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: MITCH_OS_88_DATA_DIR
+        value: /app/data
+      - key: MITCH_OS_88_ALLOWED_ORIGINS
+        sync: false
+    disk:
+      name: mitch-os-88-data
+      mountPath: /app/data
+      sizeGB: 1
