@@ -39,12 +39,30 @@ body {
   overflow: hidden;
 }
 
-.desktop {
-  position: relative;
+.desktop-stage {
   width: 100vw;
   height: 100vh;
-  min-width: 960px;
-  min-height: 700px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: #5a6cb7;
+}
+
+.desktop-scaler {
+  will-change: transform;
+}
+
+.desktop-frame {
+  width: 1280px;
+  height: 800px;
+  position: relative;
+  transform-origin: top left;
+}
+
+.desktop {
+  position: relative;
+  width: 1280px;
+  height: 800px;
   background-color: var(--desktop-blue);
   background-image:
     radial-gradient(circle at 22px 22px, rgba(0, 0, 0, 0.12) 0 2px, transparent 2px),
@@ -109,6 +127,7 @@ body {
   text-align: center;
   cursor: default;
   user-select: none;
+  touch-action: none;
 }
 
 .desktop-icon span:last-child,
@@ -340,6 +359,7 @@ body {
   background: #d4d4d4;
   cursor: grab;
   user-select: none;
+  touch-action: none;
 }
 
 .static-title {
@@ -357,6 +377,7 @@ body {
     inset 1px 1px 0 #f7b5b5,
     inset -1px -1px 0 #8e2f2f;
   flex: 0 0 auto;
+  position: relative;
 }
 
 .close-box:disabled {
@@ -401,6 +422,7 @@ body {
     inset -1px -1px 0 #b2b2b2;
   color: #333333;
   font-weight: 600;
+  touch-action: manipulation;
 }
 
 .system-button.pressed,
@@ -532,6 +554,59 @@ body {
     inset 1px 1px 0 #ffffff,
     inset -1px -1px 0 #cfcfcf;
   image-rendering: pixelated;
+}
+
+@media (max-width: 820px), (max-height: 700px) {
+  .desktop-stage {
+    align-items: start;
+    justify-items: start;
+    padding: 0;
+    background: #46589c;
+  }
+
+  .menu-bar {
+    padding: 0 6px;
+  }
+
+  .menu-left {
+    gap: 6px;
+  }
+
+  .menu-right {
+    gap: 6px;
+  }
+
+  .menu-trigger,
+  .menu-item {
+    min-width: 24px;
+    padding: 0 6px;
+  }
+
+  .desktop-icon,
+  .passive-icon {
+    width: 92px;
+  }
+
+  .desktop-icon span:last-child,
+  .passive-icon span:last-child {
+    min-height: 18px;
+    padding: 1px 4px;
+  }
+
+  .queue-window {
+    width: 420px;
+    height: 210px;
+  }
+
+  .dead-window {
+    width: 380px;
+    height: 180px;
+  }
+
+  .boot-window {
+    width: 390px;
+    min-height: 300px;
+  }
 }
 
 .visualizer-meta {

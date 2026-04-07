@@ -183,6 +183,7 @@ function getClientId() {
 }
 
 export default function Home() {
+  const [desktopScale, setDesktopScale] = useState(1);
   const [clock, setClock] = useState("--:--");
   const [state, setState] = useState<GlobalState | null>(null);
   const [session, setSession] = useState<SessionSnapshot | null>(null);
@@ -213,8 +214,9 @@ export default function Home() {
   const sessionIdRef = useRef<string | null>(null);
   const pendingSeekRef = useRef<number | null>(null);
   const autoplayAttemptedSessionRef = useRef<string | null>(null);
-  const desktopDragRef = useRef<{ id: DesktopItem["id"]; offsetX: number; offsetY: number } | null>(null);
+  const desktopDragRef = useRef<{ pointerId: number; id: DesktopItem["id"]; offsetX: number; offsetY: number } | null>(null);
   const isPlayingRef = useRef(false);
+  const desktopScaleRef = useRef(1);
   const activeSessionId = session?.session_id ?? null;
 
   function resetPlayerState() {
@@ -278,6 +280,10 @@ export default function Home() {
   useEffect(() => {
     isPlayingRef.current = isPlaying;
   }, [isPlaying]);
+
+  useEffect(() => {
+    desktopScaleRef.current = desktopScale;
+  }, [desktopScale]);
 
   useEffect(() => {
     setDesktopItems((current) =>
@@ -533,19 +539,35 @@ export default function Home() {
   }, [audioReady, hasEnteredSystem, visualizerOpen]);
 
   useEffect(() => {
+    function updateDesktopScale() {
+      const scale = Math.min(window.innerWidth / 1280, window.innerHeight / 800, 1);
+      setDesktopScale(scale);
+    }
+
+    updateDesktopScale();
+    window.addEventListener("resize", updateDesktopScale);
+    return () => {
+      window.removeEventListener("resize", updateDesktopScale);
+    };
+  }, []);
+
+  useEffect(() => {
     function closeMenu() {
       setOpenMenu(null);
     }
 
-    function handleMove(event: MouseEvent) {
+    function handleMove(event: PointerEvent) {
       if (!desktopDragRef.current) {
+        return;
+      }
+      if (desktopDragRef.current.pointerId !== event.pointerId) {
         return;
       }
 
       const iconWidth = 88;
       const iconHeight = 88;
-      const nextX = event.clientX - desktopDragRef.current.offsetX;
-      const nextY = event.clientY - desktopDragRef.current.offsetY;
+      const nextX = (event.clientX - desktopDragRef.current.offsetX) / desktopScaleRef.current;
+      const nextY = (event.clientY - desktopDragRef.current.offsetY) / desktopScaleRef.current;
 
       setDesktopItems((current) =>
         current.map((item) =>
@@ -560,17 +582,22 @@ export default function Home() {
       );
     }
 
-    function handleUp() {
+    function handleUp(event: PointerEvent) {
+      if (!desktopDragRef.current || desktopDragRef.current.pointerId !== event.pointerId) {
+        return;
+      }
       desktopDragRef.current = null;
     }
 
-    window.addEventListener("mousedown", closeMenu);
-    window.addEventListener("mousemove", handleMove);
-    window.addEventListener("mouseup", handleUp);
+    window.addEventListener("pointerdown", closeMenu);
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp);
+    window.addEventListener("pointercancel", handleUp);
     return () => {
-      window.removeEventListener("mousedown", closeMenu);
-      window.removeEventListener("mousemove", handleMove);
-      window.removeEventListener("mouseup", handleUp);
+      window.removeEventListener("pointerdown", closeMenu);
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+      window.removeEventListener("pointercancel", handleUp);
     };
   }, []);
 
@@ -932,6 +959,9 @@ export default function Home() {
   }
 
   return (
+    <div className="desktop-stage">
+      <div className="desktop-scaler" style={{ width: `${1280 * desktopScale}px`, height: `${800 * desktopScale}px` }}>
+    <div className="desktop-frame" style={{ transform: `scale(${desktopScale})` }}>
     <main className="desktop">
       <audio
         ref={audioRef}
@@ -1092,9 +1122,10 @@ export default function Home() {
                 handleDesktopItemOpen(item);
               }
             }}
-            onMouseDown={(event) => {
+            onPointerDown={(event) => {
               event.stopPropagation();
               desktopDragRef.current = {
+                pointerId: event.pointerId,
                 id: item.id,
                 offsetX: event.clientX - item.x,
                 offsetY: event.clientY - item.y,
@@ -1113,6 +1144,7 @@ export default function Home() {
         initialPosition={{ x: 160, y: 80 }}
         width={450}
         height={278}
+        scale={desktopScale}
         zIndex={frontWindow === "player" ? 20 : 10}
         onFocus={() => setFrontWindow("player")}
         closable={false}
@@ -1173,6 +1205,7 @@ export default function Home() {
           initialPosition={{ x: 625, y: 82 }}
           width={338}
           height={240}
+          scale={desktopScale}
           zIndex={frontWindow === "visualizer" ? 20 : 10}
           onFocus={() => setFrontWindow("visualizer")}
           closable
@@ -1200,6 +1233,7 @@ export default function Home() {
           initialPosition={{ x: 520, y: 108 }}
           width={560}
           height={500}
+          scale={desktopScale}
           zIndex={frontWindow === "readme" ? 20 : 10}
           onFocus={() => setFrontWindow("readme")}
           closable
@@ -1267,5 +1301,8 @@ export default function Home() {
         </div>
       )}
     </main>
+    </div>
+    </div>
+    </div>
   );
 }

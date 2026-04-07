@@ -7,6 +7,7 @@ type DesktopWindowProps = {
   initialPosition: { x: number; y: number };
   width: number;
   height: number;
+  scale?: number;
   zIndex: number;
   onFocus: () => void;
   children: ReactNode;
@@ -19,6 +20,7 @@ export function DesktopWindow({
   initialPosition,
   width,
   height,
+  scale = 1,
   zIndex,
   onFocus,
   children,
@@ -26,46 +28,53 @@ export function DesktopWindow({
   onClose,
 }: DesktopWindowProps) {
   const [position, setPosition] = useState(initialPosition);
-  const dragRef = useRef<{ startX: number; startY: number; left: number; top: number } | null>(null);
+  const dragRef = useRef<{ pointerId: number; startX: number; startY: number; left: number; top: number } | null>(null);
 
   useEffect(() => {
-    function handleMove(event: MouseEvent) {
+    function handleMove(event: PointerEvent) {
       if (!dragRef.current) {
         return;
       }
-      const viewportWidth = window.innerWidth;
-      const viewportHeight = window.innerHeight;
-      const nextX = dragRef.current.left + (event.clientX - dragRef.current.startX);
-      const nextY = dragRef.current.top + (event.clientY - dragRef.current.startY);
+      const viewportWidth = 1280;
+      const viewportHeight = 800;
+      const nextX = dragRef.current.left + (event.clientX - dragRef.current.startX) / scale;
+      const nextY = dragRef.current.top + (event.clientY - dragRef.current.startY) / scale;
       setPosition({
         x: Math.min(Math.max(0, nextX), Math.max(0, viewportWidth - width)),
         y: Math.min(Math.max(22, nextY), Math.max(22, viewportHeight - height)),
       });
     }
 
-    function handleUp() {
+    function handleUp(event: PointerEvent) {
+      if (!dragRef.current || dragRef.current.pointerId !== event.pointerId) {
+        return;
+      }
       dragRef.current = null;
     }
 
-    window.addEventListener("mousemove", handleMove);
-    window.addEventListener("mouseup", handleUp);
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp);
+    window.addEventListener("pointercancel", handleUp);
     return () => {
-      window.removeEventListener("mousemove", handleMove);
-      window.removeEventListener("mouseup", handleUp);
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+      window.removeEventListener("pointercancel", handleUp);
     };
-  }, [height, width]);
+  }, [height, scale, width]);
 
   return (
     <section
       className="desktop-window"
       style={{ width, height, left: position.x, top: position.y, zIndex }}
-      onMouseDown={onFocus}
+      onPointerDown={onFocus}
     >
       <div
         className="window-title-bar"
-        onMouseDown={(event) => {
+        onPointerDown={(event) => {
           onFocus();
+          event.currentTarget.setPointerCapture(event.pointerId);
           dragRef.current = {
+            pointerId: event.pointerId,
             startX: event.clientX,
             startY: event.clientY,
             left: position.x,
