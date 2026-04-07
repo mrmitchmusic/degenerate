@@ -545,7 +545,7 @@ export default function Home() {
       setIsMobileLayout(isCompactViewport);
       const baseWidth = isCompactViewport ? 900 : 1280;
       const baseHeight = isCompactViewport ? 660 : 800;
-      const fittedScale = Math.min(window.innerWidth / baseWidth, window.innerHeight / baseHeight);
+      const fittedScale = window.innerWidth / baseWidth;
       const snappedScale = Math.max(0.75, Math.floor(fittedScale * 20) / 20);
       setDesktopScale(snappedScale);
     }

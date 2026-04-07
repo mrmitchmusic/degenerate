@@ -866,15 +866,15 @@ body {
 }
 
 .queue-overlay {
-  position: absolute;
-  inset: 0;
+  position: fixed;
+  inset: 22px 0 0 0;
   display: grid;
   place-items: center;
   z-index: 100;
 }
 
 .boot-overlay {
-  position: absolute;
+  position: fixed;
   inset: 22px 0 0 0;
   display: flex;
   flex-direction: column;
