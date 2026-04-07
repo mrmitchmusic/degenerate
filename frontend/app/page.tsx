@@ -100,6 +100,15 @@ const MENU_DEFINITIONS = {
 } as const;
 
 type MenuKey = keyof typeof MENU_DEFINITIONS;
+type AppleMenuItem = (typeof MENU_DEFINITIONS.apple)[number];
+type StandardMenuItem = {
+  label: string;
+  enabled?: boolean;
+  action?: string;
+  checked?: boolean;
+  submenu?: boolean;
+  shortcut?: string;
+};
 
 const readMeText = `Nothing lasts forever. A fact that we're constantly reminded about in many aspects of our lives, but in the digital world it presents itself in a different way. People lose interest, they forget, they move on to 'better' things, but the items they have forgotten are still there, in their same form.
 
@@ -327,7 +336,7 @@ export default function Home() {
   useEffect(() => {
     const canvas = visualizerCanvasRef.current;
     const analyser = analyserRef.current;
-    if (!canvas || !visualizerOpen || !hasEnteredSystem) {
+    if (!canvas || !analyser || !visualizerOpen || !hasEnteredSystem) {
       return;
     }
 
@@ -1023,41 +1032,43 @@ export default function Home() {
                     event.stopPropagation();
                   }}
                 >
-                  {MENU_DEFINITIONS[menuKey].map((item, index) =>
-                    "type" in item ? (
-                      <div key={`${menuKey}-separator-${index}`} className="menu-separator" />
-                    ) : menuKey === "apple" ? (
-                      <a
-                        key={`${menuKey}-${item.label}`}
-                        className="menu-dropdown-item menu-social-item"
-                        href={item.href}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        <span className={`${item.iconClassName} menu-social-icon`} aria-hidden="true" />
-                        <span>{item.label}</span>
-                      </a>
-                    ) : (
-                      <button
-                        key={`${menuKey}-${item.label}`}
-                        type="button"
-                        className={`menu-dropdown-item ${item.enabled === false ? "menu-item-disabled" : ""}`}
-                        disabled={item.enabled === false}
-                        onClick={() => {
-                          setOpenMenu(null);
-                          handleMenuAction(item.action);
-                        }}
-                      >
-                        <span className="menu-item-main">
-                          <span className="menu-check">{item.checked ? "✓" : ""}</span>
+                  {menuKey === "apple"
+                    ? MENU_DEFINITIONS.apple.map((item) => (
+                        <a
+                          key={`${menuKey}-${item.label}`}
+                          className="menu-dropdown-item menu-social-item"
+                          href={(item as AppleMenuItem).href}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          <span className={`${(item as AppleMenuItem).iconClassName} menu-social-icon`} aria-hidden="true" />
                           <span>{item.label}</span>
-                        </span>
-                        <span className="menu-item-meta">
-                          {item.submenu ? "▶" : item.shortcut ?? ""}
-                        </span>
-                      </button>
-                    ),
-                  )}
+                        </a>
+                      ))
+                    : MENU_DEFINITIONS[menuKey].map((item, index) =>
+                        "type" in item ? (
+                          <div key={`${menuKey}-separator-${index}`} className="menu-separator" />
+                        ) : (
+                          <button
+                            key={`${menuKey}-${item.label}`}
+                            type="button"
+                            className={`menu-dropdown-item ${(item as StandardMenuItem).enabled === false ? "menu-item-disabled" : ""}`}
+                            disabled={(item as StandardMenuItem).enabled === false}
+                            onClick={() => {
+                              setOpenMenu(null);
+                              handleMenuAction((item as StandardMenuItem).action);
+                            }}
+                          >
+                            <span className="menu-item-main">
+                              <span className="menu-check">{(item as StandardMenuItem).checked ? "✓" : ""}</span>
+                              <span>{item.label}</span>
+                            </span>
+                            <span className="menu-item-meta">
+                              {(item as StandardMenuItem).submenu ? "▶" : (item as StandardMenuItem).shortcut ?? ""}
+                            </span>
+                          </button>
+                        ),
+                      )}
                 </div>
               )}
             </div>
