@@ -540,7 +540,10 @@ export default function Home() {
 
   useEffect(() => {
     function updateDesktopScale() {
-      const scale = Math.min(window.innerWidth / 1280, window.innerHeight / 800, 1);
+      const isCompactViewport = window.innerWidth <= 820 || window.innerHeight <= 700;
+      const baseWidth = isCompactViewport ? 900 : 1280;
+      const baseHeight = isCompactViewport ? 660 : 800;
+      const scale = Math.min(window.innerWidth / baseWidth, window.innerHeight / baseHeight, 1);
       setDesktopScale(scale);
     }
 
