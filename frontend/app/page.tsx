@@ -906,7 +906,7 @@ export default function Home() {
       const startY = 48;
       const stepX = 96;
       const stepY = 92;
-      const maxX = 1280 - iconWidth - 18;
+      const maxX = 1024 - iconWidth;
       const maxY = 800 - iconHeight - 18;
       const columns = Math.max(1, Math.floor((maxX - startX) / stepX) + 1);
       const rows = Math.max(1, Math.floor((maxY - startY) / stepY) + 1);
@@ -923,7 +923,7 @@ export default function Home() {
       let chosenRow = 0;
       let foundSlot = false;
 
-      for (let column = columns - 1; column >= 0 && !foundSlot; column -= 1) {
+      for (let column = 0; column < columns && !foundSlot; column += 1) {
         for (let row = 0; row < rows; row += 1) {
           if (!occupied.has(`${column}:${row}`)) {
             chosenColumn = column;
