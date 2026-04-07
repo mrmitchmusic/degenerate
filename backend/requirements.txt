@@ -4,3 +4,4 @@ numpy==2.2.4
 scipy==1.15.2
 soundfile==0.13.1
 pydantic==2.11.3
+python-multipart==0.0.20

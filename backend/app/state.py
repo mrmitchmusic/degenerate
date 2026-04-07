@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import shutil
 from pathlib import Path
 
 import soundfile as sf
@@ -32,7 +33,8 @@ class PersistentState:
     def ensure_seed_audio(self) -> None:
         if self.audio_path.exists():
             if not self.state_path.exists():
-                self.state_path.write_text(json.dumps(GlobalState().model_dump(), indent=2))
+                seeded = self._sync_audio_metadata(GlobalState(filename=self.audio_path.name))
+                self.state_path.write_text(json.dumps(seeded.model_dump(), indent=2))
             return
 
         import numpy as np
@@ -49,12 +51,18 @@ class PersistentState:
         envelope = np.linspace(1.0, 0.55, timeline.size)
         stereo = np.column_stack([(carriers + pulse) * envelope, (carriers - pulse) * envelope])
         sf.write(self.audio_path, stereo.astype("float32"), sample_rate, subtype="PCM_16")
-        seeded = self._sync_audio_metadata(GlobalState())
+        seeded = self._sync_audio_metadata(GlobalState(filename=self.audio_path.name))
         self.state_path.write_text(json.dumps(seeded.model_dump(), indent=2))
+
+    def replace_audio(self, source_path: Path, original_filename: str) -> GlobalState:
+        shutil.copyfile(source_path, self.audio_path)
+        fresh_state = self._sync_audio_metadata(GlobalState(filename=original_filename))
+        self.state_path.write_text(json.dumps(fresh_state.model_dump(), indent=2))
+        return fresh_state
 
     def _read_state_file(self) -> GlobalState:
         if not self.state_path.exists():
-            seeded = self._sync_audio_metadata(GlobalState())
+            seeded = self._sync_audio_metadata(GlobalState(filename=self.audio_path.name))
             self.state_path.write_text(json.dumps(seeded.model_dump(), indent=2))
             return seeded
         return GlobalState.model_validate_json(self.state_path.read_text())

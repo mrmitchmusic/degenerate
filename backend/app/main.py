@@ -8,7 +8,9 @@ from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 
+import soundfile as sf
 from fastapi import FastAPI, HTTPException
+from fastapi import File, Header, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
@@ -20,6 +22,7 @@ from .state import PersistentState
 BASE_DIR = Path(__file__).resolve().parents[1]
 DATA_DIR = Path(os.getenv("MITCH_OS_88_DATA_DIR", str(BASE_DIR / "data"))).resolve()
 ALLOWED_ORIGINS = [origin.strip() for origin in os.getenv("MITCH_OS_88_ALLOWED_ORIGINS", "*").split(",") if origin.strip()]
+ADMIN_TOKEN = os.getenv("MITCH_OS_88_ADMIN_TOKEN", "").strip()
 
 
 @dataclass
@@ -110,6 +113,34 @@ class MitchOs88Service:
     async def global_state(self) -> GlobalState:
         self.state = await self.state_store.load()
         return self.state
+
+    async def replace_audio_upload(self, upload: UploadFile) -> GlobalState:
+        safe_name = Path(upload.filename or "uploaded.wav").name
+        if Path(safe_name).suffix.lower() != ".wav":
+            raise HTTPException(status_code=400, detail="Only WAV files are supported")
+
+        temp_path = self.state_store.data_dir / f".upload-{uuid.uuid4().hex}.wav"
+        try:
+            contents = await upload.read()
+            if not contents:
+                raise HTTPException(status_code=400, detail="Uploaded file is empty")
+            temp_path.write_bytes(contents)
+            try:
+                info = sf.info(temp_path)
+            except RuntimeError as error:
+                raise HTTPException(status_code=400, detail="Uploaded file is not a valid WAV") from error
+
+            if info.frames <= 0 or info.duration <= 0:
+                raise HTTPException(status_code=400, detail="Uploaded WAV has no playable audio")
+
+            async with self._lock:
+                self._queue.clear()
+                self._sessions.clear()
+                self.state = self.state_store.replace_audio(temp_path, safe_name)
+                return self.state
+        finally:
+            await upload.close()
+            temp_path.unlink(missing_ok=True)
 
     async def _finalize_session_locked(self, record: SessionRecord, reason: str) -> None:
         if record.finalized:
@@ -263,3 +294,13 @@ async def current_audio(session: str) -> FileResponse:
     if not snapshot.is_active:
         raise HTTPException(status_code=423, detail="Session is not active")
     return FileResponse(service.state_store.audio_path, media_type="audio/wav", filename=state.filename)
+
+
+@app.post("/admin/upload", response_model=GlobalState)
+async def upload_audio(
+    file: UploadFile = File(...),
+    admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
+) -> GlobalState:
+    if ADMIN_TOKEN and admin_token != ADMIN_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid admin token")
+    return await service.replace_audio_upload(file)
