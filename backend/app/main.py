@@ -258,6 +258,11 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/admin/status")
+async def admin_status() -> dict[str, bool]:
+    return {"upload_enabled": bool(ADMIN_TOKEN)}
+
+
 @app.get("/state", response_model=GlobalState)
 async def get_state() -> GlobalState:
     return await service.global_state()
@@ -301,6 +306,8 @@ async def upload_audio(
     file: UploadFile = File(...),
     admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
 ) -> GlobalState:
-    if ADMIN_TOKEN and admin_token != ADMIN_TOKEN:
+    if not ADMIN_TOKEN:
+        raise HTTPException(status_code=503, detail="Admin uploads are disabled until MITCH_OS_88_ADMIN_TOKEN is configured")
+    if admin_token != ADMIN_TOKEN:
         raise HTTPException(status_code=401, detail="Invalid admin token")
     return await service.replace_audio_upload(file)
