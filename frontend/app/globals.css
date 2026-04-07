@@ -92,7 +92,7 @@ body {
 }
 
 .mobile-content {
-  padding: 14px 12px 28px;
+  padding: 14px 12px calc(120px + env(safe-area-inset-bottom, 0));
   display: flex;
   flex-direction: column;
   gap: 14px;
