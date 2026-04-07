@@ -24,9 +24,9 @@ body {
   color: var(--text);
   font-family: Charcoal, Geneva, "Helvetica Neue", Helvetica, Arial, sans-serif;
   font-size: 12px;
-  -webkit-font-smoothing: antialiased;
-  text-rendering: geometricPrecision;
-  font-weight: 700;
+  -webkit-font-smoothing: subpixel-antialiased;
+  text-rendering: auto;
+  font-weight: 600;
 }
 
 button,
