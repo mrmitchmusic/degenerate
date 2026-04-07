@@ -22,6 +22,7 @@ from .state import PersistentState
 BASE_DIR = Path(__file__).resolve().parents[1]
 DATA_DIR = Path(os.getenv("MITCH_OS_88_DATA_DIR", str(BASE_DIR / "data"))).resolve()
 ALLOWED_ORIGINS = [origin.strip() for origin in os.getenv("MITCH_OS_88_ALLOWED_ORIGINS", "*").split(",") if origin.strip()]
+ALLOWED_ORIGIN_REGEX = os.getenv("MITCH_OS_88_ALLOWED_ORIGIN_REGEX", r"^https://.*\.vercel\.app$")
 ADMIN_TOKEN = os.getenv("MITCH_OS_88_ADMIN_TOKEN", "").strip()
 
 
@@ -237,6 +238,7 @@ app = FastAPI(title="Mitch OS 88")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS if ALLOWED_ORIGINS else ["*"],
+    allow_origin_regex=ALLOWED_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

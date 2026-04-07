@@ -11,7 +11,6 @@ const ADMIN_TOKEN_STORAGE_KEY = "mitch-os-88-admin-token";
 export default function UploadPage() {
   const [file, setFile] = useState<File | null>(null);
   const [adminToken, setAdminToken] = useState("");
-  const [uploadEnabled, setUploadEnabled] = useState<boolean | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [uploadedState, setUploadedState] = useState<GlobalState | null>(null);
@@ -34,16 +33,6 @@ export default function UploadPage() {
     if (savedToken) {
       setAdminToken(savedToken);
     }
-
-    void (async () => {
-      try {
-        const response = await fetch(`${API_URL}/admin/status`);
-        const payload = (await response.json()) as { upload_enabled: boolean };
-        setUploadEnabled(payload.upload_enabled);
-      } catch {
-        setUploadEnabled(false);
-      }
-    })();
   }, []);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -97,12 +86,6 @@ export default function UploadPage() {
             will show the real uploaded filename.
           </p>
 
-          {uploadEnabled === false && (
-            <p className="upload-error">
-              Uploads are currently locked. Set <code>MITCH_OS_88_ADMIN_TOKEN</code> on the backend first.
-            </p>
-          )}
-
           <form className="upload-form" onSubmit={(event) => void handleSubmit(event)}>
             <label className="upload-field">
               <span>WAV File</span>
@@ -122,7 +105,7 @@ export default function UploadPage() {
             </label>
 
             <div className="upload-actions">
-              <button type="submit" className="system-button" disabled={isSubmitting || uploadEnabled === false}>
+              <button type="submit" className="system-button" disabled={isSubmitting}>
                 {isSubmitting ? "Uploading..." : "Replace Live Track"}
               </button>
               <Link href="/" className="upload-link">
