@@ -184,6 +184,7 @@ function getClientId() {
 
 export default function Home() {
   const [desktopScale, setDesktopScale] = useState(1);
+  const [isMobileLayout, setIsMobileLayout] = useState(false);
   const [clock, setClock] = useState("--:--");
   const [state, setState] = useState<GlobalState | null>(null);
   const [session, setSession] = useState<SessionSnapshot | null>(null);
@@ -541,6 +542,7 @@ export default function Home() {
   useEffect(() => {
     function updateDesktopScale() {
       const isCompactViewport = window.innerWidth <= 820 || window.innerHeight <= 700;
+      setIsMobileLayout(isCompactViewport);
       const baseWidth = isCompactViewport ? 900 : 1280;
       const baseHeight = isCompactViewport ? 660 : 800;
       const scale = Math.min(window.innerWidth / baseWidth, window.innerHeight / baseHeight, 1);
@@ -959,6 +961,227 @@ export default function Home() {
       setReadMeOpen(true);
       setFrontWindow("readme");
     }
+  }
+
+  const mobileShortcuts = desktopItems.filter((item) => item.id !== "audio" && !item.passive);
+  const isWaitingInQueue = Boolean(hasEnteredSystem && session && !session.is_active && session.status !== "ended" && state?.status !== "dead");
+
+  if (isMobileLayout) {
+    return (
+      <div className="mobile-shell">
+        <audio
+          ref={audioRef}
+          preload="auto"
+          crossOrigin="anonymous"
+          muted={false}
+          onLoadedMetadata={(event) => {
+            setAudioReady(true);
+            setAudioDebug(
+              `metadata | readyState=${event.currentTarget.readyState} networkState=${event.currentTarget.networkState}`,
+            );
+          }}
+          onLoadedData={(event) => {
+            setAudioReady(true);
+            setAudioDebug(
+              `data | readyState=${event.currentTarget.readyState} networkState=${event.currentTarget.networkState}`,
+            );
+            if (pendingSeekRef.current !== null) {
+              event.currentTarget.currentTime = pendingSeekRef.current;
+              pendingSeekRef.current = null;
+            }
+          }}
+          onTimeUpdate={(event) => {
+            listenRef.current = event.currentTarget.currentTime;
+            setPlaybackPosition(event.currentTarget.currentTime);
+          }}
+          onPlay={() => {
+            setPlaybackError(null);
+            setIsPlaying(true);
+          }}
+          onPause={() => {
+            setIsPlaying(false);
+          }}
+          onError={() => {
+            const audio = audioRef.current;
+            const mediaError = audio?.error;
+            if (!mediaError) {
+              setPlaybackError("Audio playback failed.");
+              return;
+            }
+
+            const codeMap: Record<number, string> = {
+              1: "Playback aborted.",
+              2: "Network error while loading audio.",
+              3: "Audio decoding failed.",
+              4: "Audio format not supported by the browser.",
+            };
+            setPlaybackError(codeMap[mediaError.code] ?? "Unknown audio error.");
+          }}
+          onEnded={() => {
+            void endSession("completed");
+          }}
+          onSeeking={(event) => {
+            const audio = event.currentTarget;
+            if (Math.abs(audio.currentTime - listenRef.current) > 1) {
+              audio.currentTime = listenRef.current;
+            }
+          }}
+          onRateChange={(event) => {
+            event.currentTarget.playbackRate = 1;
+          }}
+        />
+
+        <header className="mobile-menu-bar">
+          <div className="mobile-menu-left">
+            <span className="mitch-menu-logo" aria-hidden="true" />
+            <span>Mitch OS 88</span>
+          </div>
+          <span>{clock}</span>
+        </header>
+
+        {!hasEnteredSystem && state?.status !== "dead" && (
+          <div className="mobile-boot-screen">
+            <div className="boot-window mobile-boot-window">
+              <div className="boot-inner">
+                <div className="boot-logo-frame">
+                  <div className="boot-logo" aria-hidden="true" />
+                  <div className="boot-wordmark" aria-label="MitchOS 88">
+                    <span className="boot-wordmark-mitch">Mitch</span>
+                    <span className="boot-wordmark-os">OS</span>
+                    <span className="boot-wordmark-version">88</span>
+                  </div>
+                </div>
+                <div className="boot-status">{booting ? "Starting Up..." : "Tap to enter."}</div>
+                <div className="boot-progress">
+                  <div className="boot-progress-track">
+                    <div className="boot-progress-fill" style={{ width: booting ? "62%" : "28%" }} />
+                  </div>
+                </div>
+                <button type="button" className="system-button boot-button" onClick={() => void handleEnterSystem()} disabled={booting}>
+                  {booting ? "Starting..." : "Enter Mitch OS 88"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {state?.status === "dead" && (
+          <div className="mobile-overlay-card">
+            <div className="mobile-panel-title">File Dead</div>
+            <div className="mobile-panel-body">
+              <p>The canonical WAV can no longer be used.</p>
+              <p>This system has no recovery procedure.</p>
+              <p>Total Damage: {state.total_damage.toFixed(2)}</p>
+            </div>
+          </div>
+        )}
+
+        {hasEnteredSystem && (
+          <div className="mobile-content">
+            <section className="mobile-shortcuts">
+              {mobileShortcuts.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className="mobile-shortcut"
+                  onClick={() => handleDesktopItemOpen(item)}
+                >
+                  <span className={`${item.iconClassName} platinum-icon`} />
+                  <span>{item.label}</span>
+                </button>
+              ))}
+            </section>
+
+            {isWaitingInQueue && session && (
+              <div className="mobile-overlay-card">
+                <div className="mobile-panel-title">System Busy</div>
+                <div className="mobile-panel-body">
+                  <p>Another user is currently accessing this file.</p>
+                  <p>Queue Position: {session.queue_position}</p>
+                  <p>Estimated Wait: {formatSeconds(session.estimated_wait_seconds)}</p>
+                </div>
+              </div>
+            )}
+
+            <section className="mobile-panel">
+              <div className="mobile-panel-title">Song Player</div>
+              <div className="mobile-panel-body mobile-player-body">
+                <div className="player-header">
+                  <div className="player-logo" aria-hidden="true" />
+                  <div className="track-title">{state?.filename ?? "Loading..."}</div>
+                </div>
+                <div className="button-row">
+                  <button
+                    type="button"
+                    className={`system-button ${isPlaying ? "pressed" : ""}`}
+                    onClick={() => void handlePlay()}
+                    disabled={!session?.is_active || state?.status === "dead"}
+                  >
+                    Play
+                  </button>
+                  <button
+                    type="button"
+                    className={`system-button ${!isPlaying && audioReady ? "pressed" : ""}`}
+                    onClick={handlePause}
+                    disabled={!session?.is_active || state?.status === "dead"}
+                  >
+                    Pause
+                  </button>
+                </div>
+                <div className="player-block">
+                  <div>Progress</div>
+                  <div className="meter-frame mobile-progress-frame">
+                    <div className="meter-fill" style={{ width: `${progressPercent}%` }} />
+                  </div>
+                  <div>{formatSeconds(playbackPosition)} / {formatSeconds(state?.duration_seconds ?? 0)}</div>
+                </div>
+                <div className="player-block">
+                  <div>Integrity:</div>
+                  <div className="integrity-row">
+                    <div className="meter-frame mobile-integrity-frame">
+                      <div className="meter-fill" style={{ width: `${integrity}%` }} />
+                    </div>
+                    <span>{integrity}%</span>
+                  </div>
+                </div>
+                <div className="player-block">
+                  <div>Pause Remaining: {Math.max(0, 30 - Math.floor(pauseElapsed))}s</div>
+                  <div>Status: {state?.status === "dead" ? "File Dead" : session?.is_active ? "Active" : "Waiting"}</div>
+                  {playbackError && <div>{playbackError}</div>}
+                </div>
+              </div>
+            </section>
+
+            {visualizerOpen && (
+              <section className="mobile-panel">
+                <div className="mobile-panel-title mobile-panel-title-row">
+                  <span>Visualiser</span>
+                  <button type="button" className="close-box" onClick={() => setVisualizerOpen(false)} aria-label="Close Visualiser" />
+                </div>
+                <div className="mobile-panel-body">
+                  <div className="visualizer-layout">
+                    <div className="visualizer-caption">{isPlaying ? "Live Audio Monitor" : "Standing By"}</div>
+                    <canvas ref={visualizerCanvasRef} className="mobile-visualizer-canvas" width={320} height={220} />
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {readMeOpen && (
+              <section className="mobile-panel">
+                <div className="mobile-panel-title mobile-panel-title-row">
+                  <span>Read Me</span>
+                  <button type="button" className="close-box" onClick={() => setReadMeOpen(false)} aria-label="Close Read Me" />
+                </div>
+                <div className="mobile-panel-body mobile-readme-body">
+                  <pre className="readme-text mobile-readme-text">{readMeText}</pre>
+                </div>
+              </section>
+            )}
+          </div>
+        )}
+      </div>
+    );
   }
 
   return (

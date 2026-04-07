@@ -55,6 +55,147 @@ body {
   background-size: 64px 64px, 64px 64px, 64px 64px;
 }
 
+.mobile-shell {
+  width: 100vw;
+  min-height: 100vh;
+  background-color: var(--desktop-blue);
+  background-image:
+    radial-gradient(circle at 22px 22px, rgba(0, 0, 0, 0.12) 0 2px, transparent 2px),
+    linear-gradient(90deg, transparent 0 63px, rgba(0, 0, 0, 0.18) 63px 64px, transparent 64px),
+    linear-gradient(transparent 0 63px, rgba(0, 0, 0, 0.18) 63px 64px, transparent 64px);
+  background-position: 0 0, 0 0, 0 0;
+  background-repeat: repeat, repeat, repeat;
+  background-size: 64px 64px, 64px 64px, 64px 64px;
+  padding: env(safe-area-inset-top, 0) 0 env(safe-area-inset-bottom, 0);
+}
+
+.mobile-menu-bar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+  background: #e6e6e6;
+  border-bottom: 1px solid #707070;
+  box-shadow:
+    inset 0 1px 0 #ffffff,
+    inset 0 -1px 0 #c0c0c0;
+}
+
+.mobile-menu-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mobile-content {
+  padding: 14px 12px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.mobile-shortcuts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px 8px;
+  align-items: start;
+}
+
+.mobile-shortcut {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  padding: 0;
+  min-width: 0;
+}
+
+.mobile-shortcut span:last-child {
+  display: inline-block;
+  padding: 0 4px;
+  background: #ffffff;
+}
+
+.mobile-panel,
+.mobile-overlay-card {
+  border: 1px solid #6c6c6c;
+  background: #e3e3e3;
+  box-shadow:
+    inset 1px 1px 0 #ffffff,
+    inset -1px -1px 0 #b9b9b9,
+    1px 1px 0 rgba(91, 91, 91, 0.28);
+}
+
+.mobile-panel-title,
+.mobile-panel-title-row {
+  min-height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 3px 8px;
+  border-bottom: 1px solid #a4a4a4;
+  background: #d4d4d4;
+}
+
+.mobile-panel-title-row {
+  justify-content: space-between;
+}
+
+.mobile-panel-body {
+  padding: 12px;
+  background: #eeeeee;
+}
+
+.mobile-player-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.mobile-progress-frame,
+.mobile-integrity-frame {
+  width: 100%;
+}
+
+.mobile-readme-body {
+  padding: 10px;
+}
+
+.mobile-readme-text {
+  height: 360px;
+  font-size: 11px;
+}
+
+.mobile-visualizer-canvas {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 11;
+  border: 1px solid #828282;
+  background: #06040c;
+  box-shadow:
+    inset 1px 1px 0 #ffffff,
+    inset -1px -1px 0 #cfcfcf;
+}
+
+.mobile-boot-screen {
+  min-height: calc(100vh - 30px - env(safe-area-inset-top, 0));
+  display: grid;
+  place-items: center;
+  padding: 24px 12px;
+}
+
+.mobile-boot-window {
+  width: min(92vw, 420px);
+}
+
 .desktop-scaler {
   will-change: transform;
 }
