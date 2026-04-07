@@ -705,6 +705,16 @@ body {
 }
 
 @media (max-width: 820px), (max-height: 700px) {
+  html,
+  body {
+    min-height: 100dvh;
+  }
+
+  body {
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
   .desktop-stage {
     align-items: start;
     justify-items: center;
