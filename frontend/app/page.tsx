@@ -546,8 +546,7 @@ export default function Home() {
       const baseWidth = isCompactViewport ? 900 : 1280;
       const baseHeight = isCompactViewport ? 660 : 800;
       const fittedScale = window.innerWidth / baseWidth;
-      const snappedScale = Math.max(0.75, Math.floor(fittedScale * 20) / 20);
-      setDesktopScale(snappedScale);
+      setDesktopScale(Math.max(0.75, fittedScale));
     }
 
     updateDesktopScale();
@@ -907,8 +906,8 @@ export default function Home() {
       const startY = 48;
       const stepX = 96;
       const stepY = 92;
-      const maxX = window.innerWidth - iconWidth - 18;
-      const maxY = window.innerHeight - iconHeight - 18;
+      const maxX = 1280 - iconWidth - 18;
+      const maxY = 800 - iconHeight - 18;
       const columns = Math.max(1, Math.floor((maxX - startX) / stepX) + 1);
       const rows = Math.max(1, Math.floor((maxY - startY) / stepY) + 1);
 

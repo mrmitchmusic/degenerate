@@ -87,6 +87,9 @@ export function DesktopWindow({
           className="close-box"
           aria-label={closable ? `Close ${title}` : `${title} cannot be closed`}
           disabled={!closable}
+          onPointerDown={(event) => {
+            event.stopPropagation();
+          }}
           onClick={(event) => {
             event.stopPropagation();
             onClose?.();
