@@ -572,12 +572,13 @@ export default function Home() {
     ];
     const balls: VisualizerBall[] = Array.from({ length: 8 }, (_, index) => {
       const tone = palette[index % palette.length];
+      const radius = 11 + Math.random() * 6;
       return {
         x: 28 + Math.random() * (width - 56),
-        y: 28 + Math.random() * (height - 56),
-        vx: (Math.random() - 0.5) * 1.4,
-        vy: (Math.random() - 0.5) * 1.2,
-        radius: 11 + Math.random() * 6,
+        y: height * 0.55 + Math.random() * (height * 0.25 - radius),
+        vx: (Math.random() - 0.5) * 0.8,
+        vy: (Math.random() - 0.5) * 0.6,
+        radius,
         color: tone.color,
         shade: tone.shade,
         highlight: tone.highlight,
@@ -662,19 +663,19 @@ export default function Home() {
 
       if (transientTriggered) {
         lastTriggerTime = now;
-        const impulseScale = 1 + Math.min(1.4, (smoothedEnergy - energyThreshold) * 4.5 + delta * 6);
+        const impulseScale = 1 + Math.min(1.8, (smoothedEnergy - energyThreshold) * 5.5 + delta * 8);
         for (const ball of balls) {
-          ball.vy -= (4 + Math.random() * 6) * impulseScale;
-          ball.vx += (-3 + Math.random() * 6) * impulseScale * 0.7;
+          ball.vy -= (8 + Math.random() * 8) * impulseScale;
+          ball.vx += (-1.4 + Math.random() * 2.8) * impulseScale * 0.45;
         }
       }
 
       drawFrameBackground();
 
       for (const ball of balls) {
-        ball.vx *= 0.98;
-        ball.vy *= 0.98;
-        ball.vy += 0.05;
+        ball.vx *= 0.985;
+        ball.vy *= 0.992;
+        ball.vy += 0.18;
 
         ball.x += ball.vx;
         ball.y += ball.vy;
@@ -689,11 +690,11 @@ export default function Home() {
 
         if (ball.y - ball.radius <= 4) {
           ball.y = ball.radius + 4;
-          ball.vy = Math.abs(ball.vy) * 0.88;
+          ball.vy = Math.abs(ball.vy) * 0.74;
         } else if (ball.y + ball.radius >= height - 4) {
           ball.y = height - ball.radius - 4;
-          ball.vy = -Math.abs(ball.vy) * 0.82;
-          ball.vx += (Math.random() - 0.5) * 0.25;
+          ball.vy = -Math.abs(ball.vy) * 0.9;
+          ball.vx *= 0.96;
         }
 
         drawBall(ball);
