@@ -2,13 +2,18 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { DesktopWindow } from "@/components/DesktopWindow";
+import { DesktopWindow, WindowTitleBar } from "@/components/DesktopWindow";
 import type { GlobalState, SessionOpenResponse, SessionSnapshot } from "@/lib/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 const SESSION_STORAGE_KEY = "mitch-os-88-session-id";
 const CLIENT_STORAGE_KEY = "mitch-os-88-client-id";
 let openingSessionPromise: Promise<SessionOpenResponse> | null = null;
+const DESKTOP_WIDTH = 1280;
+const DESKTOP_HEIGHT = 800;
+const DESKTOP_MENU_HEIGHT = 22;
+const ICON_WIDTH = 88;
+const ICON_HEIGHT = 88;
 
 type DesktopItem = {
   id: string;
@@ -209,6 +214,7 @@ export default function Home() {
   const animationFrameRef = useRef<number | null>(null);
   const visualizerAvailableRef = useRef(false);
   const visualizerTrailCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const visualizerMotionRef = useRef({ bass: 0, mid: 0, treble: 0, energy: 0 });
   const listenRef = useRef(0);
   const pauseRef = useRef(0);
   const sessionRef = useRef<SessionSnapshot | null>(null);
@@ -219,6 +225,144 @@ export default function Home() {
   const isPlayingRef = useRef(false);
   const desktopScaleRef = useRef(1);
   const activeSessionId = session?.session_id ?? null;
+
+  async function ensureVisualizerAudioGraph() {
+    const audio = audioRef.current;
+    if (!audio) {
+      return false;
+    }
+
+    const AudioContextCtor =
+      window.AudioContext ||
+      (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+
+    if (!AudioContextCtor) {
+      visualizerAvailableRef.current = false;
+      return false;
+    }
+
+    try {
+      if (!audioContextRef.current) {
+        const context = new AudioContextCtor();
+        const analyser = context.createAnalyser();
+        analyser.fftSize = 128;
+        analyser.smoothingTimeConstant = 0.9;
+
+        const source = context.createMediaElementSource(audio);
+        source.connect(analyser);
+        analyser.connect(context.destination);
+
+        audioContextRef.current = context;
+        analyserRef.current = analyser;
+        sourceNodeRef.current = source;
+      }
+
+      if (audioContextRef.current.state !== "running") {
+        await audioContextRef.current.resume();
+      }
+
+      visualizerAvailableRef.current = true;
+      return true;
+    } catch (error) {
+      console.error("Visualizer audio hookup failed", error);
+      visualizerAvailableRef.current = false;
+      return false;
+    }
+  }
+
+  function clampDesktopIconPosition(x: number, y: number) {
+    return {
+      x: Math.min(Math.max(18, x), DESKTOP_WIDTH - ICON_WIDTH - 18),
+      y: Math.min(Math.max(38, y), DESKTOP_HEIGHT - ICON_HEIGHT - 18),
+    };
+  }
+
+  function renderMenuGroup(menuKey: MenuKey) {
+    return (
+      <div
+        key={menuKey}
+        className="menu-group"
+        onMouseEnter={() => setOpenMenu(menuKey)}
+        onPointerDown={(event) => {
+          event.stopPropagation();
+        }}
+      >
+        <button
+          type="button"
+          className={`${
+            menuKey === "apple" ? "apple-chip menu-trigger" : "menu-item"
+          } ${openMenu === menuKey ? "menu-open" : ""}`}
+          onPointerDown={(event) => {
+            event.stopPropagation();
+          }}
+          onMouseDown={(event) => {
+            event.stopPropagation();
+          }}
+          onClick={(event) => {
+            event.stopPropagation();
+            setOpenMenu((current) => (current === menuKey ? null : menuKey));
+          }}
+        >
+          {menuKey === "apple" ? <span className="mitch-menu-logo" aria-hidden="true" /> : menuKey[0].toUpperCase() + menuKey.slice(1)}
+        </button>
+        {openMenu === menuKey && (
+          <div
+            className={`menu-dropdown ${menuKey === "apple" ? "apple-dropdown" : ""}`}
+            onPointerDown={(event) => {
+              event.stopPropagation();
+            }}
+            onMouseDown={(event) => {
+              event.stopPropagation();
+            }}
+          >
+            {menuKey === "apple"
+              ? MENU_DEFINITIONS.apple.map((item) => (
+                  <a
+                    key={`${menuKey}-${item.label}`}
+                    className="menu-dropdown-item menu-social-item"
+                    href={(item as AppleMenuItem).href}
+                    target="_blank"
+                    rel="noreferrer"
+                    onPointerDown={(event) => {
+                      event.stopPropagation();
+                    }}
+                  >
+                    <span className={`${(item as AppleMenuItem).iconClassName} menu-social-icon`} aria-hidden="true" />
+                    <span>{item.label}</span>
+                  </a>
+                ))
+              : MENU_DEFINITIONS[menuKey].map((item, index) =>
+                  "type" in item ? (
+                    <div key={`${menuKey}-separator-${index}`} className="menu-separator" />
+                  ) : (
+                    <button
+                      key={`${menuKey}-${item.label}`}
+                      type="button"
+                      className={`menu-dropdown-item ${(item as StandardMenuItem).enabled === false ? "menu-item-disabled" : ""}`}
+                      disabled={(item as StandardMenuItem).enabled === false}
+                      onPointerDown={(event) => {
+                        event.stopPropagation();
+                      }}
+                      onClick={() => {
+                        setOpenMenu(null);
+                        handleMenuAction((item as StandardMenuItem).action);
+                      }}
+                    >
+                      <span className="menu-item-main">
+                        <span className="menu-check">{(item as StandardMenuItem).checked ? "✓" : ""}</span>
+                        <span>{item.label}</span>
+                      </span>
+                      <span className="menu-item-meta">
+                        {(item as StandardMenuItem).submenu ? "▶" : (item as StandardMenuItem).shortcut ?? ""}
+                      </span>
+                    </button>
+                  ),
+                )}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   function resetPlayerState() {
     window.localStorage.removeItem(SESSION_STORAGE_KEY);
@@ -300,38 +444,6 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) {
-      return;
-    }
-
-    if (!audioContextRef.current) {
-      const AudioContextCtor =
-        window.AudioContext ||
-        (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-      if (!AudioContextCtor) {
-        return;
-      }
-
-      try {
-        const context = new AudioContextCtor();
-        const analyser = context.createAnalyser();
-        analyser.fftSize = 64;
-        analyser.smoothingTimeConstant = 0.78;
-        const source = context.createMediaElementSource(audio);
-        source.connect(analyser);
-        analyser.connect(context.destination);
-
-        audioContextRef.current = context;
-        analyserRef.current = analyser;
-        sourceNodeRef.current = source;
-        visualizerAvailableRef.current = true;
-      } catch (error) {
-        console.error("Visualizer audio hookup failed", error);
-        visualizerAvailableRef.current = false;
-      }
-    }
-
     return () => {
       if (animationFrameRef.current !== null) {
         window.cancelAnimationFrame(animationFrameRef.current);
@@ -384,22 +496,32 @@ export default function Home() {
         waveform.fill(128);
       }
 
-      const bass = ((buffer[1] ?? 0) + (buffer[2] ?? 0) + (buffer[3] ?? 0)) / (255 * 3);
-      const mid = ((buffer[8] ?? 0) + (buffer[10] ?? 0) + (buffer[12] ?? 0)) / (255 * 3);
-      const treble = ((buffer[20] ?? 0) + (buffer[24] ?? 0) + (buffer[28] ?? 0)) / (255 * 3);
+      const rawBass = ((buffer[1] ?? 0) + (buffer[2] ?? 0) + (buffer[3] ?? 0)) / (255 * 3);
+      const rawMid = ((buffer[8] ?? 0) + (buffer[10] ?? 0) + (buffer[12] ?? 0)) / (255 * 3);
+      const rawTreble = ((buffer[20] ?? 0) + (buffer[24] ?? 0) + (buffer[28] ?? 0)) / (255 * 3);
+      const nextEnergy = Math.min(1, rawBass * 0.5 + rawMid * 0.3 + rawTreble * 0.2);
+
+      visualizerMotionRef.current.bass += (rawBass - visualizerMotionRef.current.bass) * 0.12;
+      visualizerMotionRef.current.mid += (rawMid - visualizerMotionRef.current.mid) * 0.1;
+      visualizerMotionRef.current.treble += (rawTreble - visualizerMotionRef.current.treble) * 0.08;
+      visualizerMotionRef.current.energy += (nextEnergy - visualizerMotionRef.current.energy) * 0.1;
+
+      const bass = Math.min(0.8, visualizerMotionRef.current.bass);
+      const mid = Math.min(0.78, visualizerMotionRef.current.mid);
+      const treble = Math.min(0.75, visualizerMotionRef.current.treble);
       const centerX = width / 2;
       const centerY = height / 2;
-      const energy = Math.min(1, bass * 0.5 + mid * 0.3 + treble * 0.2);
+      const energy = Math.min(0.82, visualizerMotionRef.current.energy);
       const hueShift = (time * 18) % 360;
 
       trailContext.save();
       trailContext.globalCompositeOperation = "source-over";
-      trailContext.fillStyle = `rgba(3, 2, 10, ${isPlayingRef.current ? 0.07 : 0.18})`;
+      trailContext.fillStyle = `rgba(3, 2, 10, ${isPlayingRef.current ? 0.09 : 0.18})`;
       trailContext.fillRect(0, 0, width, height);
 
       trailContext.translate(centerX, centerY);
-      trailContext.rotate(0.003 + bass * 0.025);
-      const zoom = 1.006 + energy * 0.018;
+      trailContext.rotate(0.0015 + bass * 0.01);
+      const zoom = 1.003 + energy * 0.008;
       trailContext.scale(zoom, zoom);
       trailContext.translate(-centerX, -centerY);
       trailContext.drawImage(canvas, 0, 0, width, height);
@@ -421,7 +543,7 @@ export default function Home() {
 
       for (let tunnel = 0; tunnel < 18; tunnel += 1) {
         const progress = tunnel / 18;
-        const radius = 22 + progress * 132 + bass * 26;
+        const radius = 22 + progress * 132 + bass * 14;
         const hue = (hueShift + 102 + progress * 34 + Math.sin(time * 0.55 + tunnel) * 16) % 360;
         const alpha = 0.06 + progress * 0.05;
         trailContext.beginPath();
@@ -431,9 +553,9 @@ export default function Home() {
           const waveValue = ((waveform[waveIndex] ?? 128) - 128) / 128;
           const spiral = angle + time * (0.22 + progress * 0.18);
           const distortion =
-            Math.sin(spiral * 3 + time * 0.8 + tunnel * 0.3) * (10 + progress * 18 + mid * 22) +
-            Math.cos(spiral * 7 - time * 0.4) * (6 + treble * 20) +
-            waveValue * (18 + progress * 24);
+            Math.sin(spiral * 3 + time * 0.8 + tunnel * 0.3) * (6 + progress * 10 + mid * 10) +
+            Math.cos(spiral * 7 - time * 0.4) * (3 + treble * 10) +
+            waveValue * (8 + progress * 10);
           const ellipse = 0.55 + progress * 0.65;
           const x = centerX + Math.cos(spiral) * (radius + distortion);
           const y = centerY + Math.sin(spiral) * (radius * ellipse + distortion * 0.82);
@@ -444,7 +566,7 @@ export default function Home() {
           }
         }
         trailContext.strokeStyle = `hsla(${hue}, 96%, ${42 + progress * 25}%, ${alpha})`;
-        trailContext.lineWidth = 1 + progress * 3.4;
+        trailContext.lineWidth = 1 + progress * 2.2;
         trailContext.stroke();
       }
 
@@ -454,11 +576,11 @@ export default function Home() {
         for (let x = -12; x <= width + 12; x += 3) {
           const waveIndex = Math.floor(((x + width) / (width + 24)) * waveform.length) % waveform.length;
           const waveValue = ((waveform[waveIndex] ?? 128) - 128) / 128;
-          const drift = Math.sin(time * (0.7 + ribbon * 0.08) + x * 0.012 + ribbon) * (20 + bass * 40);
+          const drift = Math.sin(time * (0.7 + ribbon * 0.08) + x * 0.012 + ribbon) * (10 + bass * 16);
           const y =
             centerY +
-            Math.sin((x / width) * Math.PI * (1.5 + ribbon * 0.35) + time * (1 + ribbon * 0.12)) * (24 + ribbon * 7) +
-            waveValue * (30 + ribbon * 4) +
+            Math.sin((x / width) * Math.PI * (1.5 + ribbon * 0.35) + time * (1 + ribbon * 0.12)) * (14 + ribbon * 4) +
+            waveValue * (14 + ribbon * 2.5) +
             drift;
           if (x <= -12) {
             trailContext.moveTo(x, y);
@@ -472,7 +594,7 @@ export default function Home() {
             : ribbon % 3 === 1
               ? `hsla(${(hueShift + 340) % 360}, 100%, 62%, ${0.14 + ribbon * 0.025})`
               : `hsla(${(hueShift + 230) % 360}, 100%, 68%, ${0.16 + ribbon * 0.025})`;
-        trailContext.lineWidth = 1.6 + ribbon * 0.45;
+        trailContext.lineWidth = 1.2 + ribbon * 0.3;
         trailContext.stroke();
       }
 
@@ -481,8 +603,8 @@ export default function Home() {
         const waveIndex = spoke % waveform.length;
         const waveValue = ((waveform[waveIndex] ?? 128) - 128) / 128;
         const inner = 6 + spoke * 0.6;
-        const outer = 80 + bass * 120 + (buffer[spoke % buffer.length] ?? 0) * 0.55;
-        const bend = Math.sin(time * 1.5 + spoke * 0.6) * (22 + mid * 26) + waveValue * 30;
+        const outer = 80 + bass * 56 + ((buffer[spoke % buffer.length] ?? 0) / 255) * 28;
+        const bend = Math.sin(time * 1.5 + spoke * 0.6) * (10 + mid * 12) + waveValue * 10;
         const x1 = centerX + Math.cos(angle) * inner;
         const y1 = centerY + Math.sin(angle) * inner;
         const cx = centerX + Math.cos(angle + 0.22) * (outer * 0.55) + bend;
@@ -493,7 +615,7 @@ export default function Home() {
           spoke % 2 === 0
             ? `hsla(${(hueShift + 118) % 360}, 100%, 60%, ${0.08 + treble * 0.35})`
             : `hsla(${(hueShift + 350) % 360}, 100%, 58%, ${0.05 + mid * 0.2})`;
-        trailContext.lineWidth = 1 + (spoke % 4) * 0.9;
+        trailContext.lineWidth = 1 + (spoke % 4) * 0.45;
         trailContext.beginPath();
         trailContext.moveTo(x1, y1);
         trailContext.quadraticCurveTo(cx, cy, x2, y2);
@@ -537,14 +659,13 @@ export default function Home() {
         animationFrameRef.current = null;
       }
     };
-  }, [audioReady, hasEnteredSystem, visualizerOpen]);
+  }, [audioReady, hasEnteredSystem, isPlaying, visualizerOpen]);
 
   useEffect(() => {
     function updateDesktopScale() {
       const isCompactViewport = window.innerWidth <= 820 || window.innerHeight <= 700;
       setIsMobileLayout(isCompactViewport);
       const baseWidth = isCompactViewport ? 900 : 1280;
-      const baseHeight = isCompactViewport ? 660 : 800;
       const fittedScale = window.innerWidth / baseWidth;
       setDesktopScale(Math.max(0.75, fittedScale));
     }
@@ -569,18 +690,19 @@ export default function Home() {
         return;
       }
 
-      const iconWidth = 88;
-      const iconHeight = 88;
-      const nextX = (event.clientX - desktopDragRef.current.offsetX) / desktopScaleRef.current;
-      const nextY = (event.clientY - desktopDragRef.current.offsetY) / desktopScaleRef.current;
+      const pointerX = event.clientX / desktopScaleRef.current;
+      const pointerY = event.clientY / desktopScaleRef.current;
+      const nextX = pointerX - desktopDragRef.current.offsetX;
+      const nextY = pointerY - desktopDragRef.current.offsetY;
+      const clamped = clampDesktopIconPosition(nextX, nextY);
 
       setDesktopItems((current) =>
         current.map((item) =>
           item.id === desktopDragRef.current?.id
             ? {
                 ...item,
-                x: Math.min(Math.max(18, nextX), window.innerWidth - iconWidth - 18),
-                y: Math.min(Math.max(38, nextY), window.innerHeight - iconHeight - 18),
+                x: clamped.x,
+                y: clamped.y,
               }
             : item,
         ),
@@ -834,7 +956,7 @@ export default function Home() {
       currentAudio.volume = 1;
       currentAudio.playbackRate = 1;
       setPlaybackError(null);
-      await audioContextRef.current?.resume();
+      await ensureVisualizerAudioGraph();
 
       if (!canResumeCurrentSource) {
         currentAudio.pause();
@@ -869,6 +991,7 @@ export default function Home() {
     setBooting(true);
     setPlaybackError(null);
     setAudioDebug("booting");
+    await ensureVisualizerAudioGraph();
     setTimeout(() => {
       setHasEnteredSystem(true);
       setBooting(false);
@@ -885,6 +1008,7 @@ export default function Home() {
       return;
     }
     if (item.id === "visualizer") {
+      void ensureVisualizerAudioGraph();
       setVisualizerOpen(true);
       setFrontWindow("visualizer");
       return;
@@ -906,8 +1030,8 @@ export default function Home() {
       const startY = 48;
       const stepX = 96;
       const stepY = 92;
-      const maxX = 1024 - iconWidth;
-      const maxY = 800 - iconHeight - 18;
+      const maxX = DESKTOP_WIDTH - ICON_WIDTH - 18;
+      const maxY = DESKTOP_HEIGHT - ICON_HEIGHT - 18;
       const columns = Math.max(1, Math.floor((maxX - startX) / stepX) + 1);
       const rows = Math.max(1, Math.floor((maxY - startY) / stepY) + 1);
 
@@ -960,6 +1084,7 @@ export default function Home() {
     if (action === "readme") {
       setReadMeOpen(true);
       setFrontWindow("readme");
+      return;
     }
   }
 
@@ -1032,11 +1157,12 @@ export default function Home() {
         />
 
         <header className="mobile-menu-bar">
-          <div className="mobile-menu-left">
-            <span className="mitch-menu-logo" aria-hidden="true" />
-            <span>Mitch OS 88</span>
+          <div className="mobile-menu-left menu-left">
+            {(["apple", "file"] as const).map(renderMenuGroup)}
           </div>
-          <span>{clock}</span>
+          <div className="menu-right">
+            <span>{clock}</span>
+          </div>
         </header>
 
         {!hasEnteredSystem && state?.status !== "dead" && (
@@ -1067,8 +1193,8 @@ export default function Home() {
 
         {state?.status === "dead" && (
           <div className="mobile-overlay-card">
-            <div className="mobile-panel-title">File Dead</div>
-            <div className="mobile-panel-body">
+            <WindowTitleBar title="File Dead" closable={false} staticTitle />
+            <div className="window-body mobile-panel-body">
               <p>The canonical WAV can no longer be used.</p>
               <p>This system has no recovery procedure.</p>
               <p>Total Damage: {state.total_damage.toFixed(2)}</p>
@@ -1094,8 +1220,8 @@ export default function Home() {
 
             {isWaitingInQueue && session && (
               <div className="mobile-overlay-card">
-                <div className="mobile-panel-title">System Busy</div>
-                <div className="mobile-panel-body">
+                <WindowTitleBar title="System Busy" closable={false} staticTitle />
+                <div className="window-body mobile-panel-body">
                   <p>Another user is currently accessing this file.</p>
                   <p>Queue Position: {session.queue_position}</p>
                   <p>Estimated Wait: {formatSeconds(session.estimated_wait_seconds)}</p>
@@ -1104,8 +1230,8 @@ export default function Home() {
             )}
 
             <section className="mobile-panel">
-              <div className="mobile-panel-title">Song Player</div>
-              <div className="mobile-panel-body mobile-player-body">
+              <WindowTitleBar title="Song Player" closable={false} staticTitle />
+              <div className="window-body mobile-panel-body mobile-player-body">
                 <div className="player-header">
                   <div className="player-logo" aria-hidden="true" />
                   <div className="track-title">{state?.filename ?? "Loading..."}</div>
@@ -1154,11 +1280,8 @@ export default function Home() {
 
             {visualizerOpen && (
               <section className="mobile-panel">
-                <div className="mobile-panel-title mobile-panel-title-row">
-                  <span>Visualiser</span>
-                  <button type="button" className="close-box" onClick={() => setVisualizerOpen(false)} aria-label="Close Visualiser" />
-                </div>
-                <div className="mobile-panel-body">
+                <WindowTitleBar title="Visualiser" onClose={() => setVisualizerOpen(false)} staticTitle />
+                <div className="window-body mobile-panel-body">
                   <div className="visualizer-layout">
                     <div className="visualizer-caption">{isPlaying ? "Live Audio Monitor" : "Standing By"}</div>
                     <canvas ref={visualizerCanvasRef} className="mobile-visualizer-canvas" width={320} height={220} />
@@ -1169,11 +1292,8 @@ export default function Home() {
 
             {readMeOpen && (
               <section className="mobile-panel">
-                <div className="mobile-panel-title mobile-panel-title-row">
-                  <span>Read Me</span>
-                  <button type="button" className="close-box" onClick={() => setReadMeOpen(false)} aria-label="Close Read Me" />
-                </div>
-                <div className="mobile-panel-body mobile-readme-body">
+                <WindowTitleBar title="Read Me" onClose={() => setReadMeOpen(false)} staticTitle />
+                <div className="window-body mobile-panel-body mobile-readme-body">
                   <pre className="readme-text mobile-readme-text">{readMeText}</pre>
                 </div>
               </section>
@@ -1260,75 +1380,7 @@ export default function Home() {
 
       <header className="menu-bar">
         <div className="menu-left">
-          {(["apple", "file", "edit", "view", "special", "help"] as const).map((menuKey) => (
-            <div
-              key={menuKey}
-              className="menu-group"
-              onMouseEnter={() => setOpenMenu(menuKey)}
-            >
-              <button
-                type="button"
-                className={`${
-                  menuKey === "apple" ? "apple-chip menu-trigger" : "menu-item"
-                } ${openMenu === menuKey ? "menu-open" : ""}`}
-                onMouseDown={(event) => {
-                  event.stopPropagation();
-                }}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  setOpenMenu((current) => (current === menuKey ? null : menuKey));
-                }}
-              >
-                {menuKey === "apple" ? <span className="mitch-menu-logo" aria-hidden="true" /> : menuKey[0].toUpperCase() + menuKey.slice(1)}
-              </button>
-              {openMenu === menuKey && (
-                <div
-                  className={`menu-dropdown ${menuKey === "apple" ? "apple-dropdown" : ""}`}
-                  onMouseDown={(event) => {
-                    event.stopPropagation();
-                  }}
-                >
-                  {menuKey === "apple"
-                    ? MENU_DEFINITIONS.apple.map((item) => (
-                        <a
-                          key={`${menuKey}-${item.label}`}
-                          className="menu-dropdown-item menu-social-item"
-                          href={(item as AppleMenuItem).href}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          <span className={`${(item as AppleMenuItem).iconClassName} menu-social-icon`} aria-hidden="true" />
-                          <span>{item.label}</span>
-                        </a>
-                      ))
-                    : MENU_DEFINITIONS[menuKey].map((item, index) =>
-                        "type" in item ? (
-                          <div key={`${menuKey}-separator-${index}`} className="menu-separator" />
-                        ) : (
-                          <button
-                            key={`${menuKey}-${item.label}`}
-                            type="button"
-                            className={`menu-dropdown-item ${(item as StandardMenuItem).enabled === false ? "menu-item-disabled" : ""}`}
-                            disabled={(item as StandardMenuItem).enabled === false}
-                            onClick={() => {
-                              setOpenMenu(null);
-                              handleMenuAction((item as StandardMenuItem).action);
-                            }}
-                          >
-                            <span className="menu-item-main">
-                              <span className="menu-check">{(item as StandardMenuItem).checked ? "✓" : ""}</span>
-                              <span>{item.label}</span>
-                            </span>
-                            <span className="menu-item-meta">
-                              {(item as StandardMenuItem).submenu ? "▶" : (item as StandardMenuItem).shortcut ?? ""}
-                            </span>
-                          </button>
-                        ),
-                      )}
-                </div>
-              )}
-            </div>
-          ))}
+          {(["apple", "file", "edit", "view", "special", "help"] as const).map(renderMenuGroup)}
         </div>
         <div className="menu-right">
           <span>{clock}</span>
@@ -1350,11 +1402,13 @@ export default function Home() {
             }}
             onPointerDown={(event) => {
               event.stopPropagation();
+              const pointerX = event.clientX / desktopScaleRef.current;
+              const pointerY = event.clientY / desktopScaleRef.current;
               desktopDragRef.current = {
                 pointerId: event.pointerId,
                 id: item.id,
-                offsetX: event.clientX - item.x,
-                offsetY: event.clientY - item.y,
+                offsetX: pointerX - item.x,
+                offsetY: pointerY - item.y,
               };
             }}
           >
@@ -1472,10 +1526,7 @@ export default function Home() {
       {hasEnteredSystem && session && !session.is_active && session.status !== "ended" && state?.status !== "dead" && (
         <div className="queue-overlay">
           <div className="queue-window">
-            <div className="window-title-bar static-title">
-              <button type="button" className="close-box" aria-hidden="true" disabled />
-              <span>System Busy</span>
-            </div>
+            <WindowTitleBar title="System Busy" closable={false} staticTitle />
             <div className="queue-body">
               <p>Another user is currently accessing this file.</p>
               <p>Queue Position: {session.queue_position}</p>
@@ -1488,10 +1539,7 @@ export default function Home() {
       {state?.status === "dead" && (
         <div className="queue-overlay">
           <div className="queue-window dead-window">
-            <div className="window-title-bar static-title">
-              <button type="button" className="close-box" aria-hidden="true" disabled />
-              <span>File Dead</span>
-            </div>
+            <WindowTitleBar title="File Dead" closable={false} staticTitle />
             <div className="queue-body">
               <p>The canonical WAV can no longer be used.</p>
               <p>This system has no recovery procedure.</p>

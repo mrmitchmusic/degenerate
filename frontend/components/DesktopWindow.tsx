@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode, useEffect, useRef, useState } from "react";
+import { ReactNode, PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from "react";
 
 type DesktopWindowProps = {
   title: string;
@@ -14,6 +14,46 @@ type DesktopWindowProps = {
   closable?: boolean;
   onClose?: () => void;
 };
+
+type WindowTitleBarProps = {
+  title: string;
+  closable?: boolean;
+  onClose?: () => void;
+  onPointerDown?: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  staticTitle?: boolean;
+};
+
+export function WindowTitleBar({
+  title,
+  closable = true,
+  onClose,
+  onPointerDown,
+  staticTitle = false,
+}: WindowTitleBarProps) {
+  return (
+    <div
+      className={`window-title-bar ${staticTitle ? "static-title" : ""}`}
+      onPointerDown={onPointerDown}
+    >
+      <button
+        type="button"
+        className="close-box"
+        aria-label={closable ? `Close ${title}` : `${title} cannot be closed`}
+        disabled={!closable}
+        onPointerDown={(event) => {
+          event.stopPropagation();
+        }}
+        onClick={(event) => {
+          event.stopPropagation();
+          onClose?.();
+        }}
+      />
+      <div className="title-bar-stripes" aria-hidden="true" />
+      <span className="window-title-text">{title}</span>
+      <div className="title-bar-stripes" aria-hidden="true" />
+    </div>
+  );
+}
 
 export function DesktopWindow({
   title,
@@ -68,8 +108,10 @@ export function DesktopWindow({
       style={{ width, height, left: position.x, top: position.y, zIndex }}
       onPointerDown={onFocus}
     >
-      <div
-        className="window-title-bar"
+      <WindowTitleBar
+        title={title}
+        closable={closable}
+        onClose={onClose}
         onPointerDown={(event) => {
           onFocus();
           event.currentTarget.setPointerCapture(event.pointerId);
@@ -81,24 +123,7 @@ export function DesktopWindow({
             top: position.y,
           };
         }}
-      >
-        <button
-          type="button"
-          className="close-box"
-          aria-label={closable ? `Close ${title}` : `${title} cannot be closed`}
-          disabled={!closable}
-          onPointerDown={(event) => {
-            event.stopPropagation();
-          }}
-          onClick={(event) => {
-            event.stopPropagation();
-            onClose?.();
-          }}
-        />
-        <div className="title-bar-stripes" aria-hidden="true" />
-        <span className="window-title-text">{title}</span>
-        <div className="title-bar-stripes" aria-hidden="true" />
-      </div>
+      />
       <div className="window-body">{children}</div>
     </section>
   );
