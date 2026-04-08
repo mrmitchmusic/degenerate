@@ -560,6 +560,14 @@ export default function Home() {
       highlight: string;
     };
 
+    function lerp(start: number, end: number, alpha: number) {
+      return start + (end - start) * alpha;
+    }
+
+    function clamp(value: number, min: number, max: number) {
+      return Math.min(max, Math.max(min, value));
+    }
+
     const width = canvas.width;
     const height = canvas.height;
     const waveform = new Uint8Array(analyser.fftSize);
@@ -688,36 +696,45 @@ export default function Home() {
         const impulse = Math.max(6, Math.min(16, intensity * 6));
         console.log("TRANSIENT", { sample: waveform[0], energy: rawEnergy, smoothedEnergy, avgEnergy, intensity });
         for (const ball of balls) {
-          ball.vy -= Math.max(8, 8 + Math.random() * 8);
-          ball.vy -= impulse * 0.35;
-          ball.vx += -1 + Math.random() * 2;
+          const impulseX = (-4 + Math.random() * 8) * Math.min(1.1, impulse / 10);
+          const impulseY = (-6 + Math.random() * 4) * Math.min(1.2, impulse / 10);
+          ball.vx = lerp(ball.vx, ball.vx + impulseX, 0.5);
+          ball.vy = lerp(ball.vy, ball.vy + impulseY, 0.5);
         }
       }
 
       drawFrameBackground();
 
       for (const ball of balls) {
-        ball.vx *= 0.99;
+        ball.vx += -0.015 + Math.random() * 0.03;
+        ball.vy += -0.015 + Math.random() * 0.03;
+        ball.vx *= 0.995;
         ball.vy *= 0.995;
-        ball.vy += 0.4;
+        ball.vy += 0.08;
+        ball.vx = clamp(ball.vx, -5, 5);
+        ball.vy = clamp(ball.vy, -6, 6);
 
         ball.x += ball.vx;
         ball.y += ball.vy;
 
         if (ball.x - ball.radius <= 4) {
           ball.x = ball.radius + 4;
-          ball.vx = Math.abs(ball.vx) * 0.88;
+          ball.vx *= -0.6;
+          ball.vy *= -0.6;
         } else if (ball.x + ball.radius >= width - 4) {
           ball.x = width - ball.radius - 4;
-          ball.vx = -Math.abs(ball.vx) * 0.88;
+          ball.vx *= -0.6;
+          ball.vy *= -0.6;
         }
 
         if (ball.y - ball.radius <= 4) {
           ball.y = ball.radius + 4;
-          ball.vy *= -0.7;
+          ball.vx *= -0.6;
+          ball.vy *= -0.6;
         } else if (ball.y + ball.radius > height - 4) {
           ball.y = height - ball.radius - 4;
-          ball.vy *= -0.7;
+          ball.vx *= -0.6;
+          ball.vy *= -0.6;
         }
 
         drawBall(ball);
