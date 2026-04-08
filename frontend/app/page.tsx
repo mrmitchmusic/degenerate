@@ -598,6 +598,7 @@ export default function Home() {
     let previousSmoothedEnergy = 0;
     const energyHistory: number[] = [];
     let lastTriggerTime = 0;
+    let triggerCursor = 0;
     const triggerCooldownMs = 120;
 
     function drawBall(ball: VisualizerBall) {
@@ -625,23 +626,42 @@ export default function Home() {
     }
 
     function drawFrameBackground() {
-      drawingContext.fillStyle = "#f1f1f1";
+      const time = performance.now() * 0.00018;
+      const hue = (time * 360) % 360;
+      const centerX = width * (0.5 + Math.sin(time * 2.1) * 0.08);
+      const centerY = height * (0.48 + Math.cos(time * 1.4) * 0.07);
+
+      drawingContext.fillStyle = "#040404";
       drawingContext.fillRect(0, 0, width, height);
-      drawingContext.fillStyle = "#e5e5e5";
-      drawingContext.fillRect(0, 0, width, 16);
-      drawingContext.fillStyle = "#d1d1d1";
-      drawingContext.fillRect(0, height - 14, width, 14);
-      drawingContext.strokeStyle = "#9a9a9a";
+
+      const portalGradient = drawingContext.createRadialGradient(centerX, centerY, 8, centerX, centerY, width * 0.62);
+      portalGradient.addColorStop(0, `hsla(${hue + 40}, 90%, 62%, 0.22)`);
+      portalGradient.addColorStop(0.18, `hsla(${hue + 110}, 88%, 48%, 0.18)`);
+      portalGradient.addColorStop(0.42, `hsla(${hue + 210}, 86%, 42%, 0.1)`);
+      portalGradient.addColorStop(1, "rgba(0,0,0,0)");
+      drawingContext.fillStyle = portalGradient;
+      drawingContext.fillRect(0, 0, width, height);
+
       drawingContext.lineWidth = 1;
-      for (let x = 16; x < width; x += 32) {
+      for (let ring = 0; ring < 6; ring += 1) {
+        const ringRadius = 22 + ring * 24 + Math.sin(time * 12 + ring) * 3;
+        drawingContext.strokeStyle = `hsla(${(hue + ring * 28) % 360}, 95%, ${55 - ring * 4}%, ${0.16 - ring * 0.018})`;
         drawingContext.beginPath();
-        drawingContext.moveTo(x, 0);
-        drawingContext.lineTo(x, height);
+        drawingContext.ellipse(
+          centerX + Math.sin(time * 6 + ring) * 4,
+          centerY + Math.cos(time * 5 + ring) * 3,
+          ringRadius * 1.15,
+          ringRadius * 0.72,
+          time * 5 + ring * 0.2,
+          0,
+          Math.PI * 2,
+        );
         drawingContext.stroke();
       }
-      drawingContext.strokeStyle = "#ffffff";
+
+      drawingContext.strokeStyle = "#1c1c1c";
       drawingContext.strokeRect(0.5, 0.5, width - 1, height - 1);
-      drawingContext.strokeStyle = "#7d7d7d";
+      drawingContext.strokeStyle = "#4d4d4d";
       drawingContext.strokeRect(1.5, 1.5, width - 3, height - 3);
     }
 
@@ -693,24 +713,23 @@ export default function Home() {
       if (transientTriggered) {
         lastTriggerTime = now;
         const intensity = avgEnergy > 0 ? smoothedEnergy / avgEnergy : 1;
-        const impulse = Math.max(10, Math.min(22, intensity * 10));
-        console.log("TRANSIENT", { sample: waveform[0], energy: rawEnergy, smoothedEnergy, avgEnergy, intensity });
-        for (const ball of balls) {
-          const impulseX = (-6 + Math.random() * 12) * Math.min(1.35, impulse / 10);
-          const impulseY = (-10 + Math.random() * 6) * Math.min(1.5, impulse / 10);
-          ball.vx = lerp(ball.vx, ball.vx + impulseX, 0.72);
-          ball.vy = lerp(ball.vy, ball.vy + impulseY, 0.72);
-        }
+        const impulse = Math.max(8, Math.min(18, intensity * 8));
+        const targetBall = balls[triggerCursor % balls.length];
+        triggerCursor += 1;
+        const impulseX = (-5 + Math.random() * 10) * Math.min(1.15, impulse / 10);
+        const impulseY = (-7 + Math.random() * 4) * Math.min(1.2, impulse / 10);
+        targetBall.vx = lerp(targetBall.vx, targetBall.vx + impulseX, 0.34);
+        targetBall.vy = lerp(targetBall.vy, targetBall.vy + impulseY, 0.34);
       }
 
       drawFrameBackground();
 
       for (const ball of balls) {
-        ball.vx += -0.03 + Math.random() * 0.06;
-        ball.vy += -0.03 + Math.random() * 0.06;
-        ball.vx *= 0.995;
-        ball.vy *= 0.995;
-        ball.vy += 0.03;
+        ball.vx += -0.022 + Math.random() * 0.044;
+        ball.vy += -0.022 + Math.random() * 0.044;
+        ball.vx *= 0.997;
+        ball.vy *= 0.997;
+        ball.vy += 0.012;
         ball.vx = clamp(ball.vx, -6, 6);
         ball.vy = clamp(ball.vy, -8, 8);
 
@@ -719,22 +738,22 @@ export default function Home() {
 
         if (ball.x - ball.radius <= 4) {
           ball.x = ball.radius + 4;
-          ball.vx *= -0.6;
-          ball.vy *= -0.6;
+          ball.vx *= -0.48;
+          ball.vy *= -0.48;
         } else if (ball.x + ball.radius >= width - 4) {
           ball.x = width - ball.radius - 4;
-          ball.vx *= -0.6;
-          ball.vy *= -0.6;
+          ball.vx *= -0.48;
+          ball.vy *= -0.48;
         }
 
         if (ball.y - ball.radius <= 4) {
           ball.y = ball.radius + 4;
-          ball.vx *= -0.6;
-          ball.vy *= -0.6;
+          ball.vx *= -0.48;
+          ball.vy *= -0.48;
         } else if (ball.y + ball.radius > height - 4) {
           ball.y = height - ball.radius - 4;
-          ball.vx *= -0.6;
-          ball.vy *= -0.6;
+          ball.vx *= -0.48;
+          ball.vy *= -0.48;
         }
 
         drawBall(ball);
