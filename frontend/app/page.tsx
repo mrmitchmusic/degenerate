@@ -271,9 +271,12 @@ export default function Home() {
   }
 
   function clampDesktopIconPosition(x: number, y: number) {
+    const visibleWidth = Math.min(DESKTOP_WIDTH, window.innerWidth / Math.max(desktopScaleRef.current, 0.01));
+    const visibleHeight = Math.min(DESKTOP_HEIGHT, window.innerHeight / Math.max(desktopScaleRef.current, 0.01));
+
     return {
-      x: Math.min(Math.max(18, x), DESKTOP_WIDTH - ICON_WIDTH - 18),
-      y: Math.min(Math.max(38, y), DESKTOP_HEIGHT - ICON_HEIGHT - 18),
+      x: Math.min(Math.max(18, x), Math.max(18, visibleWidth - ICON_WIDTH - 18)),
+      y: Math.min(Math.max(38, y), Math.max(38, visibleHeight - ICON_HEIGHT - 18)),
     };
   }
 
@@ -670,6 +673,15 @@ export default function Home() {
       const baseWidth = isCompactViewport ? 900 : 1280;
       const fittedScale = window.innerWidth / baseWidth;
       setDesktopScale(Math.max(0.75, fittedScale));
+      setDesktopItems((current) =>
+        current.map((item) => {
+          if (item.passive) {
+            return item;
+          }
+          const clamped = clampDesktopIconPosition(item.x, item.y);
+          return clamped.x === item.x && clamped.y === item.y ? item : { ...item, ...clamped };
+        }),
+      );
     }
 
     updateDesktopScale();
@@ -1026,14 +1038,14 @@ export default function Home() {
       const folderCount = current.filter((item) => item.iconClassName === "icon-folder").length + 1;
       const pairIndex = ((folderCount - 1) * 2) % FOLDER_NAME_WORDS.length;
       const nextLabel = `${FOLDER_NAME_WORDS[pairIndex]} ${FOLDER_NAME_WORDS[(pairIndex + 1) % FOLDER_NAME_WORDS.length]}`;
-      const iconWidth = 88;
-      const iconHeight = 88;
       const startX = 20;
       const startY = 48;
       const stepX = 96;
       const stepY = 92;
-      const maxX = DESKTOP_WIDTH - ICON_WIDTH - 18;
-      const maxY = DESKTOP_HEIGHT - ICON_HEIGHT - 18;
+      const visibleWidth = Math.min(DESKTOP_WIDTH, window.innerWidth / Math.max(desktopScaleRef.current, 0.01));
+      const visibleHeight = Math.min(DESKTOP_HEIGHT, window.innerHeight / Math.max(desktopScaleRef.current, 0.01));
+      const maxX = Math.max(startX, visibleWidth - ICON_WIDTH - 18);
+      const maxY = Math.max(startY, visibleHeight - ICON_HEIGHT - 18);
       const columns = Math.max(1, Math.floor((maxX - startX) / stepX) + 1);
       const rows = Math.max(1, Math.floor((maxY - startY) / stepY) + 1);
 
@@ -1065,14 +1077,16 @@ export default function Home() {
         chosenRow = rows - 1;
       }
 
+      const nextPosition = clampDesktopIconPosition(startX + chosenColumn * stepX, startY + chosenRow * stepY);
+
       return [
         ...current,
         {
           id: `folder-${crypto.randomUUID()}`,
           label: nextLabel,
           iconClassName: "icon-folder",
-          x: Math.min(startX + chosenColumn * stepX, maxX),
-          y: Math.min(startY + chosenRow * stepY, maxY),
+          x: nextPosition.x,
+          y: nextPosition.y,
         },
       ];
     });
