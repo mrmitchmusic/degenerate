@@ -7,7 +7,8 @@ import type { GlobalState, SessionOpenResponse, SessionSnapshot } from "@/lib/ty
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 const SESSION_STORAGE_KEY = "mitch-os-88-session-id";
-const CLIENT_STORAGE_KEY = "mitch-os-88-client-id";
+const BROWSER_SESSION_STORAGE_KEY = "mitch-os-88-browser-session-id";
+const LEGACY_CLIENT_STORAGE_KEY = "mitch-os-88-client-id";
 let openingSessionPromise: Promise<SessionOpenResponse> | null = null;
 const DESKTOP_WIDTH = 1280;
 const DESKTOP_HEIGHT = 800;
@@ -177,14 +178,22 @@ function formatSeconds(value: number) {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
-function getClientId() {
-  const existing = window.localStorage.getItem(CLIENT_STORAGE_KEY);
+function getBrowserSessionId() {
+  const existing =
+    window.localStorage.getItem(BROWSER_SESSION_STORAGE_KEY) ?? window.localStorage.getItem(LEGACY_CLIENT_STORAGE_KEY);
   if (existing) {
+    window.localStorage.setItem(BROWSER_SESSION_STORAGE_KEY, existing);
     return existing;
   }
   const next = crypto.randomUUID();
-  window.localStorage.setItem(CLIENT_STORAGE_KEY, next);
+  window.localStorage.setItem(BROWSER_SESSION_STORAGE_KEY, next);
   return next;
+}
+
+function getBrowserSessionHeaders() {
+  return {
+    "X-Browser-Session-Id": getBrowserSessionId(),
+  };
 }
 
 export default function Home() {
@@ -393,8 +402,8 @@ export default function Home() {
     if (!openingSessionPromise) {
       openingSessionPromise = fetch(`${API_URL}/session/open`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ client_id: getClientId() }),
+        headers: { "Content-Type": "application/json", ...getBrowserSessionHeaders() },
+        body: JSON.stringify({ browser_session_id: getBrowserSessionId() }),
       })
         .then((response) => response.json() as Promise<SessionOpenResponse>)
         .finally(() => {
@@ -781,7 +790,7 @@ export default function Home() {
     const poll = window.setInterval(async () => {
       try {
         const [sessionResponse, stateResponse] = await Promise.all([
-          fetch(`${API_URL}/session/${activeSessionId}`),
+          fetch(`${API_URL}/session/${activeSessionId}`, { headers: getBrowserSessionHeaders() }),
           fetch(`${API_URL}/state`),
         ]);
         const statePayload: GlobalState = await stateResponse.json();
@@ -824,7 +833,7 @@ export default function Home() {
       try {
         const response = await fetch(`${API_URL}/session/${activeSessionId}/heartbeat`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...getBrowserSessionHeaders() },
           body: JSON.stringify({
             listened_seconds: listenedSeconds,
             paused_seconds: pauseRef.current,
@@ -884,7 +893,7 @@ export default function Home() {
       }
       void fetch(`${API_URL}/session/${currentSessionId}/end`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getBrowserSessionHeaders() },
         body: JSON.stringify({
           listened_seconds: listenRef.current,
           paused_seconds: pauseRef.current,
@@ -914,7 +923,7 @@ export default function Home() {
     }
     const response = await fetch(`${API_URL}/session/${activeSessionId}/end`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...getBrowserSessionHeaders() },
       body: JSON.stringify({
         listened_seconds: listenRef.current,
         paused_seconds: pauseRef.current,
@@ -955,7 +964,9 @@ export default function Home() {
       setAudioDebug("blocked: missing audio element");
       return;
     }
-    const nextSrc = `${API_URL}/audio/current?session=${currentSession.session_id}`;
+    const nextSrc = `${API_URL}/audio/current?session=${currentSession.session_id}&browser_session_id=${encodeURIComponent(
+      getBrowserSessionId(),
+    )}`;
     const currentAudio = audioRef.current;
     const currentSrcUrl = currentAudio.currentSrc || currentAudio.src;
     const currentSrcSession = currentSrcUrl ? new URL(currentSrcUrl).searchParams.get("session") : null;

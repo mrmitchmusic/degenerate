@@ -34,7 +34,11 @@ class SessionOpenResponse(BaseModel):
 
 
 class OpenSessionPayload(BaseModel):
-    client_id: str = Field(min_length=1)
+    browser_session_id: str | None = Field(default=None, min_length=1)
+    client_id: str | None = Field(default=None, min_length=1)
+
+    def resolved_browser_session_id(self) -> str:
+        return (self.browser_session_id or self.client_id or "").strip()
 
 
 class HeartbeatPayload(BaseModel):

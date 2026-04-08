@@ -29,7 +29,7 @@ ADMIN_TOKEN = os.getenv("MITCH_OS_88_ADMIN_TOKEN", "").strip()
 @dataclass
 class SessionRecord:
     session_id: str
-    client_id: str
+    browser_session_id: str
     created_at: float
     queue_entered_at: float
     status: str = "queued"
@@ -63,31 +63,40 @@ class MitchOs88Service:
             except asyncio.CancelledError:
                 pass
 
-    async def open_session(self, client_id: str) -> SessionSnapshot:
+    async def open_session(self, browser_session_id: str) -> SessionSnapshot:
         async with self._lock:
             for record in self._sessions.values():
-                if record.client_id == client_id and not record.finalized and record.status != "ended":
+                if (
+                    record.browser_session_id == browser_session_id
+                    and not record.finalized
+                    and record.status != "ended"
+                ):
+                    self._ensure_session_queued_locked(record.session_id)
                     self._promote_next_locked()
                     return self._snapshot_locked(record.session_id)
 
             session_id = uuid.uuid4().hex
             now = time.time()
-            record = SessionRecord(session_id=session_id, client_id=client_id, created_at=now, queue_entered_at=now)
+            record = SessionRecord(
+                session_id=session_id,
+                browser_session_id=browser_session_id,
+                created_at=now,
+                queue_entered_at=now,
+            )
             self._sessions[session_id] = record
-            self._queue.append(session_id)
+            self._ensure_session_queued_locked(session_id)
             self._promote_next_locked()
             return self._snapshot_locked(session_id)
 
-    async def get_session(self, session_id: str) -> SessionSnapshot:
+    async def get_session(self, session_id: str, browser_session_id: str | None = None) -> SessionSnapshot:
         async with self._lock:
-            if session_id not in self._sessions:
-                raise HTTPException(status_code=404, detail="Session not found")
+            self._require_owned_session_locked(session_id, browser_session_id)
             self._promote_next_locked()
             return self._snapshot_locked(session_id)
 
-    async def heartbeat(self, session_id: str, payload: HeartbeatPayload) -> SessionSnapshot:
+    async def heartbeat(self, session_id: str, browser_session_id: str, payload: HeartbeatPayload) -> SessionSnapshot:
         async with self._lock:
-            record = self._require_session_locked(session_id)
+            record = self._require_owned_session_locked(session_id, browser_session_id)
             if record.status == "ended":
                 return self._snapshot_locked(session_id)
             if not record.status == "active":
@@ -102,9 +111,9 @@ class MitchOs88Service:
                 await self._finalize_session_locked(record, "pause_limit")
             return self._snapshot_locked(session_id)
 
-    async def end_session(self, session_id: str, payload: EndSessionPayload) -> SessionSnapshot:
+    async def end_session(self, session_id: str, browser_session_id: str, payload: EndSessionPayload) -> SessionSnapshot:
         async with self._lock:
-            record = self._require_session_locked(session_id)
+            record = self._require_owned_session_locked(session_id, browser_session_id)
             if record.status != "ended":
                 record.listened_seconds = max(record.listened_seconds, payload.listened_seconds)
                 record.paused_seconds = max(record.paused_seconds, payload.paused_seconds)
@@ -189,6 +198,17 @@ class MitchOs88Service:
             raise HTTPException(status_code=404, detail="Session not found")
         return record
 
+    def _require_owned_session_locked(self, session_id: str, browser_session_id: str | None) -> SessionRecord:
+        record = self._require_session_locked(session_id)
+        if browser_session_id and record.browser_session_id != browser_session_id:
+            raise HTTPException(status_code=403, detail="Session does not belong to this browser")
+        return record
+
+    def _ensure_session_queued_locked(self, session_id: str) -> None:
+        if session_id in self._queue:
+            return
+        self._queue.append(session_id)
+
     def _promote_next_locked(self) -> None:
         if self.state.status == "dead":
             return
@@ -272,32 +292,57 @@ async def get_state() -> GlobalState:
 
 @app.post("/session/open", response_model=SessionOpenResponse)
 async def open_session(payload: OpenSessionPayload) -> SessionOpenResponse:
-    session = await service.open_session(payload.client_id)
+    browser_session_id = payload.resolved_browser_session_id()
+    if not browser_session_id:
+        raise HTTPException(status_code=400, detail="browser_session_id is required")
+    session = await service.open_session(browser_session_id)
     state = await service.global_state()
     return SessionOpenResponse(session=session, state=state)
 
 
 @app.get("/session/{session_id}", response_model=SessionSnapshot)
-async def get_session(session_id: str) -> SessionSnapshot:
-    return await service.get_session(session_id)
+async def get_session(
+    session_id: str,
+    browser_session_id: str | None = Header(default=None, alias="X-Browser-Session-Id"),
+) -> SessionSnapshot:
+    return await service.get_session(session_id, browser_session_id)
 
 
 @app.post("/session/{session_id}/heartbeat", response_model=SessionSnapshot)
-async def heartbeat(session_id: str, payload: HeartbeatPayload) -> SessionSnapshot:
-    return await service.heartbeat(session_id, payload)
+async def heartbeat(
+    session_id: str,
+    payload: HeartbeatPayload,
+    browser_session_id: str | None = Header(default=None, alias="X-Browser-Session-Id"),
+) -> SessionSnapshot:
+    if not browser_session_id:
+        raise HTTPException(status_code=400, detail="X-Browser-Session-Id header is required")
+    return await service.heartbeat(session_id, browser_session_id, payload)
 
 
 @app.post("/session/{session_id}/end", response_model=SessionSnapshot)
-async def end_session(session_id: str, payload: EndSessionPayload) -> SessionSnapshot:
-    return await service.end_session(session_id, payload)
+async def end_session(
+    session_id: str,
+    payload: EndSessionPayload,
+    browser_session_id: str | None = Header(default=None, alias="X-Browser-Session-Id"),
+) -> SessionSnapshot:
+    if not browser_session_id:
+        raise HTTPException(status_code=400, detail="X-Browser-Session-Id header is required")
+    return await service.end_session(session_id, browser_session_id, payload)
 
 
 @app.get("/audio/current")
-async def current_audio(session: str) -> FileResponse:
+async def current_audio(
+    session: str,
+    browser_session_id: str | None = None,
+    browser_session_id_header: str | None = Header(default=None, alias="X-Browser-Session-Id"),
+) -> FileResponse:
+    owner_browser_session_id = browser_session_id or browser_session_id_header
+    if not owner_browser_session_id:
+        raise HTTPException(status_code=400, detail="browser_session_id is required")
     state = await service.global_state()
     if state.status == "dead":
         raise HTTPException(status_code=410, detail="Audio file is dead")
-    snapshot = await service.get_session(session)
+    snapshot = await service.get_session(session, owner_browser_session_id)
     if not snapshot.is_active:
         raise HTTPException(status_code=423, detail="Session is not active")
     return FileResponse(service.state_store.audio_path, media_type="audio/wav", filename=state.filename)
