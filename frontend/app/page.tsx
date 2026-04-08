@@ -1278,7 +1278,7 @@ export default function Home() {
                   <div>{formatSeconds(playbackPosition)} / {formatSeconds(state?.duration_seconds ?? 0)}</div>
                 </div>
                 <div className="player-block">
-                  <div>Integrity:</div>
+                  <div>File Integrity:</div>
                   <div className="integrity-row">
                     <div className="meter-frame mobile-integrity-frame">
                       <div className="meter-fill" style={{ width: `${integrity}%` }} />
@@ -1438,8 +1438,8 @@ export default function Home() {
       <DesktopWindow
         title="Song Player"
         initialPosition={{ x: 160, y: 80 }}
-        width={450}
-        height={278}
+        width={470}
+        height={292}
         scale={desktopScale}
         zIndex={frontWindow === "player" ? 20 : 10}
         onFocus={() => setFrontWindow("player")}
@@ -1478,7 +1478,7 @@ export default function Home() {
           </div>
 
           <div className="player-block">
-            <div>Integrity:</div>
+            <div>File Integrity:</div>
             <div className="integrity-row">
               <div className="meter-frame integrity-frame">
                 <div className="meter-fill" style={{ width: `${integrity}%` }} />
