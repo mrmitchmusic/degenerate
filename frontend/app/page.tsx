@@ -342,8 +342,10 @@ export default function Home() {
                       disabled={(item as StandardMenuItem).enabled === false}
                       onPointerDown={(event) => {
                         event.stopPropagation();
-                      }}
-                      onClick={() => {
+                        event.preventDefault();
+                        if ((item as StandardMenuItem).enabled === false) {
+                          return;
+                        }
                         setOpenMenu(null);
                         handleMenuAction((item as StandardMenuItem).action);
                       }}
@@ -1549,6 +1551,9 @@ export default function Home() {
         </div>
       )}
 
+    </main>
+    </div>
+    </div>
       {!hasEnteredSystem && state?.status !== "dead" && (
         <div className="boot-overlay">
           <div className="boot-window">
@@ -1574,9 +1579,6 @@ export default function Home() {
           </div>
         </div>
       )}
-    </main>
-    </div>
-    </div>
     </div>
   );
 }
