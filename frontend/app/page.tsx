@@ -247,6 +247,7 @@ export default function Home() {
   const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const visualizerAvailableRef = useRef(false);
+  const visualizerDebugLogAtRef = useRef(0);
   const listenRef = useRef(0);
   const pauseRef = useRef(0);
   const sessionRef = useRef<SessionSnapshot | null>(null);
@@ -588,8 +589,6 @@ export default function Home() {
     let smoothedEnergy = 0;
     let previousSmoothedEnergy = 0;
     let lastTriggerTime = 0;
-    const energyThreshold = 0.16;
-    const spikeThreshold = 0.045;
     const triggerCooldownMs = 160;
 
     function drawBall(ball: VisualizerBall) {
@@ -638,7 +637,7 @@ export default function Home() {
     }
 
     const draw = () => {
-      if (visualizerAvailableRef.current && analyser && isPlayingRef.current && audioReady) {
+      if (visualizerAvailableRef.current && analyser) {
         analyser.getByteTimeDomainData(waveform);
       } else {
         waveform.fill(128);
@@ -654,16 +653,25 @@ export default function Home() {
       previousSmoothedEnergy = smoothedEnergy;
 
       const now = performance.now();
+      if (isPlayingRef.current && now - visualizerDebugLogAtRef.current > 500) {
+        visualizerDebugLogAtRef.current = now;
+        console.log("VIS_SAMPLE", waveform[0], "ENERGY", rawEnergy.toFixed(3), "DELTA", delta.toFixed(3));
+      }
+
+      const forceTestTrigger = isPlayingRef.current && audioReady && Math.random() < 0.02;
+      if (forceTestTrigger) {
+        console.log("VIS_TEST_TRIGGER");
+      }
+
       const transientTriggered =
         isPlayingRef.current &&
         audioReady &&
-        smoothedEnergy > energyThreshold &&
-        delta > spikeThreshold &&
+        (delta > 0.02 || forceTestTrigger) &&
         now - lastTriggerTime > triggerCooldownMs;
 
       if (transientTriggered) {
         lastTriggerTime = now;
-        console.log("TRANSIENT");
+        console.log("TRANSIENT", { sample: waveform[0], energy: rawEnergy, delta });
         const impulse = Math.max(8, Math.min(18, delta * 100));
         for (const ball of balls) {
           ball.vy -= Math.max(8, 8 + Math.random() * 8);
