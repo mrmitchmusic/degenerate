@@ -10,7 +10,8 @@ const SESSION_STORAGE_KEY = "mitch-os-88-session-id";
 const BROWSER_SESSION_STORAGE_KEY = "mitch-os-88-browser-session-id";
 const LEGACY_CLIENT_STORAGE_KEY = "mitch-os-88-client-id";
 const TAB_STORAGE_KEY = "mitch-os-88-tab-id";
-const ACTIVE_TAB_STORAGE_KEY = "mitch-os-88-active-tab";
+const ACTIVE_CONTROLLER_TAB_STORAGE_KEY = "active_controller_tab";
+const LEGACY_ACTIVE_TAB_STORAGE_KEY = "mitch-os-88-active-tab";
 let openingSessionPromise: Promise<SessionOpenResponse> | null = null;
 const DESKTOP_WIDTH = 1280;
 const DESKTOP_HEIGHT = 800;
@@ -211,6 +212,13 @@ function getTabId() {
   return next;
 }
 
+function getStoredActiveControllerTab() {
+  return (
+    window.localStorage.getItem(ACTIVE_CONTROLLER_TAB_STORAGE_KEY) ??
+    window.localStorage.getItem(LEGACY_ACTIVE_TAB_STORAGE_KEY)
+  );
+}
+
 export default function Home() {
   const [desktopScale, setDesktopScale] = useState(1);
   const [isMobileLayout, setIsMobileLayout] = useState(false);
@@ -258,7 +266,8 @@ export default function Home() {
     if (!tabId) {
       return;
     }
-    window.localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, tabId);
+    window.localStorage.setItem(ACTIVE_CONTROLLER_TAB_STORAGE_KEY, tabId);
+    window.localStorage.removeItem(LEGACY_ACTIVE_TAB_STORAGE_KEY);
     setActivePlaybackTabId(tabId);
   }
 
@@ -266,8 +275,9 @@ export default function Home() {
     if (!tabId) {
       return;
     }
-    if (window.localStorage.getItem(ACTIVE_TAB_STORAGE_KEY) === tabId) {
-      window.localStorage.removeItem(ACTIVE_TAB_STORAGE_KEY);
+    if (getStoredActiveControllerTab() === tabId) {
+      window.localStorage.removeItem(ACTIVE_CONTROLLER_TAB_STORAGE_KEY);
+      window.localStorage.removeItem(LEGACY_ACTIVE_TAB_STORAGE_KEY);
       setActivePlaybackTabId(null);
     }
   }
@@ -471,15 +481,19 @@ export default function Home() {
 
   useEffect(() => {
     setTabId(getTabId());
-    setActivePlaybackTabId(window.localStorage.getItem(ACTIVE_TAB_STORAGE_KEY));
+    setActivePlaybackTabId(getStoredActiveControllerTab());
   }, []);
 
   useEffect(() => {
     function syncActiveTab(event?: StorageEvent) {
-      if (event && event.key !== ACTIVE_TAB_STORAGE_KEY) {
+      if (
+        event &&
+        event.key !== ACTIVE_CONTROLLER_TAB_STORAGE_KEY &&
+        event.key !== LEGACY_ACTIVE_TAB_STORAGE_KEY
+      ) {
         return;
       }
-      setActivePlaybackTabId(window.localStorage.getItem(ACTIVE_TAB_STORAGE_KEY));
+      setActivePlaybackTabId(getStoredActiveControllerTab());
     }
 
     window.addEventListener("storage", syncActiveTab);
@@ -966,6 +980,9 @@ export default function Home() {
       if (!currentSessionId || !currentSession || currentSession.status === "ended") {
         return;
       }
+      if (!tabId || getStoredActiveControllerTab() !== tabId) {
+        return;
+      }
       releaseActiveTab();
       void fetch(`${API_URL}/session/${currentSessionId}/end`, {
         method: "POST",
@@ -983,7 +1000,7 @@ export default function Home() {
     return () => {
       window.removeEventListener("beforeunload", handleUnload);
     };
-  }, []);
+  }, [tabId]);
 
   const integrity = useMemo(() => Math.round(state?.integrity_percent ?? 100), [state?.integrity_percent]);
   const progressPercent = useMemo(() => {

@@ -115,6 +115,8 @@ class MitchOs88Service:
     async def end_session(self, session_id: str, browser_session_id: str, payload: EndSessionPayload) -> SessionSnapshot:
         async with self._lock:
             record = self._require_owned_session_locked(session_id, browser_session_id)
+            if record.status != "active":
+                return self._snapshot_locked(session_id)
             if record.status != "ended":
                 record.listened_seconds = max(record.listened_seconds, payload.listened_seconds)
                 record.paused_seconds = max(record.paused_seconds, payload.paused_seconds)
