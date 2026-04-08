@@ -71,7 +71,8 @@ class MitchOs88Service:
                     and not record.finalized
                     and record.status != "ended"
                 ):
-                    self._ensure_session_queued_locked(record.session_id)
+                    if record.status != "active":
+                        self._ensure_session_queued_locked(record.session_id)
                     self._promote_next_locked()
                     return self._snapshot_locked(record.session_id)
 
@@ -205,15 +206,25 @@ class MitchOs88Service:
         return record
 
     def _ensure_session_queued_locked(self, session_id: str) -> None:
+        record = self._sessions.get(session_id)
+        if record is None or record.finalized or record.status in {"active", "ended"}:
+            return
         if session_id in self._queue:
             return
         self._queue.append(session_id)
 
+    def _active_session_locked(self) -> SessionRecord | None:
+        return next((record for record in self._sessions.values() if record.status == "active" and not record.finalized), None)
+
     def _promote_next_locked(self) -> None:
         if self.state.status == "dead":
             return
-        active_exists = any(record.status == "active" for record in self._sessions.values() if not record.finalized)
-        if active_exists:
+        active_record = self._active_session_locked()
+        if active_record is not None:
+            try:
+                self._queue.remove(active_record.session_id)
+            except ValueError:
+                pass
             return
         while self._queue:
             next_id = self._queue[0]
@@ -221,6 +232,7 @@ class MitchOs88Service:
             if record is None or record.finalized or record.status == "ended":
                 self._queue.popleft()
                 continue
+            self._queue.popleft()
             record.status = "active"
             record.started_at = time.time()
             record.last_heartbeat = time.time()
@@ -228,6 +240,19 @@ class MitchOs88Service:
 
     def _snapshot_locked(self, session_id: str) -> SessionSnapshot:
         record = self._require_session_locked(session_id)
+        if record.status == "active":
+            return SessionSnapshot(
+                session_id=record.session_id,
+                queue_position=0,
+                is_active=self.state.status == "alive",
+                status="active",
+                listened_seconds=record.listened_seconds,
+                paused_seconds=record.paused_seconds,
+                started_at=record.started_at,
+                last_heartbeat=record.last_heartbeat,
+                estimated_wait_seconds=0.0,
+            )
+
         queue_list = [queued_id for queued_id in self._queue if queued_id in self._sessions and not self._sessions[queued_id].finalized]
         queue_position = 0
         if record.status != "ended" and session_id in queue_list:

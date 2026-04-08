@@ -9,6 +9,8 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 const SESSION_STORAGE_KEY = "mitch-os-88-session-id";
 const BROWSER_SESSION_STORAGE_KEY = "mitch-os-88-browser-session-id";
 const LEGACY_CLIENT_STORAGE_KEY = "mitch-os-88-client-id";
+const TAB_STORAGE_KEY = "mitch-os-88-tab-id";
+const ACTIVE_TAB_STORAGE_KEY = "mitch-os-88-active-tab";
 let openingSessionPromise: Promise<SessionOpenResponse> | null = null;
 const DESKTOP_WIDTH = 1280;
 const DESKTOP_HEIGHT = 800;
@@ -172,6 +174,9 @@ function formatClock(now: Date) {
 }
 
 function formatSeconds(value: number) {
+  if (!Number.isFinite(value)) {
+    return "0:00";
+  }
   const safe = Math.max(0, Math.floor(value));
   const minutes = Math.floor(safe / 60);
   const seconds = safe % 60;
@@ -196,6 +201,16 @@ function getBrowserSessionHeaders() {
   };
 }
 
+function getTabId() {
+  const existing = window.sessionStorage.getItem(TAB_STORAGE_KEY);
+  if (existing) {
+    return existing;
+  }
+  const next = crypto.randomUUID();
+  window.sessionStorage.setItem(TAB_STORAGE_KEY, next);
+  return next;
+}
+
 export default function Home() {
   const [desktopScale, setDesktopScale] = useState(1);
   const [isMobileLayout, setIsMobileLayout] = useState(false);
@@ -212,6 +227,8 @@ export default function Home() {
   const [audioReady, setAudioReady] = useState(false);
   const [playbackPosition, setPlaybackPosition] = useState(0);
   const [playbackError, setPlaybackError] = useState<string | null>(null);
+  const [tabId, setTabId] = useState<string | null>(null);
+  const [activePlaybackTabId, setActivePlaybackTabId] = useState<string | null>(null);
   const [audioDebug, setAudioDebug] = useState("idle");
   const [openMenu, setOpenMenu] = useState<MenuKey | null>(null);
   const [desktopItems, setDesktopItems] = useState<DesktopItem[]>(DEFAULT_DESKTOP_ITEMS);
@@ -234,6 +251,26 @@ export default function Home() {
   const isPlayingRef = useRef(false);
   const desktopScaleRef = useRef(1);
   const activeSessionId = session?.session_id ?? null;
+  const sameSessionActiveInAnotherTab = Boolean(session?.is_active && tabId && activePlaybackTabId && activePlaybackTabId !== tabId);
+  const controlsDisabled = Boolean(!session?.is_active || state?.status === "dead" || sameSessionActiveInAnotherTab);
+
+  function claimActiveTab() {
+    if (!tabId) {
+      return;
+    }
+    window.localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, tabId);
+    setActivePlaybackTabId(tabId);
+  }
+
+  function releaseActiveTab() {
+    if (!tabId) {
+      return;
+    }
+    if (window.localStorage.getItem(ACTIVE_TAB_STORAGE_KEY) === tabId) {
+      window.localStorage.removeItem(ACTIVE_TAB_STORAGE_KEY);
+      setActivePlaybackTabId(null);
+    }
+  }
 
   async function ensureVisualizerAudioGraph() {
     const audio = audioRef.current;
@@ -380,6 +417,7 @@ export default function Home() {
 
   function resetPlayerState() {
     window.localStorage.removeItem(SESSION_STORAGE_KEY);
+    releaseActiveTab();
     setSession(null);
     setIsPlaying(false);
     setAudioReady(false);
@@ -430,6 +468,25 @@ export default function Home() {
     }
     return payload.session;
   }
+
+  useEffect(() => {
+    setTabId(getTabId());
+    setActivePlaybackTabId(window.localStorage.getItem(ACTIVE_TAB_STORAGE_KEY));
+  }, []);
+
+  useEffect(() => {
+    function syncActiveTab(event?: StorageEvent) {
+      if (event && event.key !== ACTIVE_TAB_STORAGE_KEY) {
+        return;
+      }
+      setActivePlaybackTabId(window.localStorage.getItem(ACTIVE_TAB_STORAGE_KEY));
+    }
+
+    window.addEventListener("storage", syncActiveTab);
+    return () => {
+      window.removeEventListener("storage", syncActiveTab);
+    };
+  }, []);
 
   useEffect(() => {
     sessionRef.current = session;
@@ -854,13 +911,18 @@ export default function Home() {
     if (!hasEnteredSystem || !session?.is_active || !activeSessionId || isPlaying || state?.status === "dead") {
       return;
     }
+    if (sameSessionActiveInAnotherTab) {
+      setPlaybackError("This session is already active in another tab.");
+      setAudioDebug("blocked: active in another tab");
+      return;
+    }
     if (autoplayAttemptedSessionRef.current === activeSessionId) {
       return;
     }
 
     autoplayAttemptedSessionRef.current = activeSessionId;
     void handlePlay(true);
-  }, [activeSessionId, hasEnteredSystem, isPlaying, session?.is_active, state?.status]);
+  }, [activeSessionId, hasEnteredSystem, isPlaying, sameSessionActiveInAnotherTab, session?.is_active, state?.status]);
 
   useEffect(() => {
     if (!hasEnteredSystem || !session?.is_active) {
@@ -885,12 +947,26 @@ export default function Home() {
   }, [pauseElapsed, activeSessionId, session]);
 
   useEffect(() => {
+    if (sameSessionActiveInAnotherTab) {
+      setPlaybackError("This session is already active in another tab.");
+      setIsPlaying(false);
+      audioRef.current?.pause();
+      return;
+    }
+
+    if (playbackError === "This session is already active in another tab.") {
+      setPlaybackError(null);
+    }
+  }, [playbackError, sameSessionActiveInAnotherTab]);
+
+  useEffect(() => {
     const handleUnload = () => {
       const currentSession = sessionRef.current;
       const currentSessionId = sessionIdRef.current;
       if (!currentSessionId || !currentSession || currentSession.status === "ended") {
         return;
       }
+      releaseActiveTab();
       void fetch(`${API_URL}/session/${currentSessionId}/end`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...getBrowserSessionHeaders() },
@@ -921,6 +997,7 @@ export default function Home() {
     if (!activeSessionId) {
       return;
     }
+    releaseActiveTab();
     const response = await fetch(`${API_URL}/session/${activeSessionId}/end`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...getBrowserSessionHeaders() },
@@ -956,6 +1033,12 @@ export default function Home() {
     if (!currentSession.is_active) {
       setPlaybackError("Waiting for active listener slot.");
       setAudioDebug(`blocked: ${currentSession.status} queue=${currentSession.queue_position}`);
+      return;
+    }
+
+    if (sameSessionActiveInAnotherTab) {
+      setPlaybackError("This session is already active in another tab.");
+      setAudioDebug("blocked: active in another tab");
       return;
     }
 
@@ -995,6 +1078,7 @@ export default function Home() {
       }
 
       await currentAudio.play();
+      claimActiveTab();
       setIsPlaying(true);
       setAudioDebug(`play() resolved | paused=${currentAudio.paused} readyState=${currentAudio.readyState}`);
     } catch (error) {
@@ -1008,6 +1092,7 @@ export default function Home() {
   }
 
   function handlePause() {
+    releaseActiveTab();
     audioRef.current?.pause();
     setIsPlaying(false);
   }
@@ -1116,7 +1201,9 @@ export default function Home() {
   }
 
   const mobileShortcuts = desktopItems.filter((item) => item.id !== "audio" && !item.passive);
-  const isWaitingInQueue = Boolean(hasEnteredSystem && session && !session.is_active && session.status !== "ended" && state?.status !== "dead");
+  const isWaitingInQueue = Boolean(
+    hasEnteredSystem && session && session.status === "queued" && !session.is_active && state?.status !== "dead",
+  );
 
   if (isMobileLayout) {
     return (
@@ -1151,6 +1238,7 @@ export default function Home() {
             setIsPlaying(true);
           }}
           onPause={() => {
+            releaseActiveTab();
             setIsPlaying(false);
           }}
           onError={() => {
@@ -1268,7 +1356,7 @@ export default function Home() {
                     type="button"
                     className={`system-button ${isPlaying ? "pressed" : ""}`}
                     onClick={() => void handlePlay()}
-                    disabled={!session?.is_active || state?.status === "dead"}
+                    disabled={controlsDisabled}
                   >
                     Play
                   </button>
@@ -1276,7 +1364,7 @@ export default function Home() {
                     type="button"
                     className={`system-button ${!isPlaying && audioReady ? "pressed" : ""}`}
                     onClick={handlePause}
-                    disabled={!session?.is_active || state?.status === "dead"}
+                    disabled={controlsDisabled}
                   >
                     Pause
                   </button>
@@ -1300,6 +1388,7 @@ export default function Home() {
                 <div className="player-block">
                   <div>Pause Remaining: {Math.max(0, 30 - Math.floor(pauseElapsed))}s</div>
                   <div>Status: {state?.status === "dead" ? "File Dead" : session?.is_active ? "Active" : "Waiting"}</div>
+                  {sameSessionActiveInAnotherTab && <div>This session is already active in another tab.</div>}
                   {playbackError && <div>{playbackError}</div>}
                 </div>
               </div>
@@ -1370,6 +1459,7 @@ export default function Home() {
           setAudioDebug("playing");
         }}
         onPause={() => {
+          releaseActiveTab();
           setIsPlaying(false);
           setAudioDebug("paused");
         }}
@@ -1466,7 +1556,7 @@ export default function Home() {
               type="button"
               className={`system-button ${isPlaying ? "pressed" : ""}`}
               onClick={() => void handlePlay()}
-              disabled={!session?.is_active || state?.status === "dead"}
+              disabled={controlsDisabled}
             >
               Play
             </button>
@@ -1474,7 +1564,7 @@ export default function Home() {
               type="button"
               className={`system-button ${!isPlaying && audioReady ? "pressed" : ""}`}
               onClick={handlePause}
-              disabled={!session?.is_active || state?.status === "dead"}
+              disabled={controlsDisabled}
             >
               Pause
             </button>
@@ -1501,6 +1591,7 @@ export default function Home() {
           <div className="player-block">
             <div>Pause Remaining: {Math.max(0, 30 - Math.floor(pauseElapsed))}s</div>
             <div>Status: {state?.status === "dead" ? "File Dead" : session?.is_active ? "Active" : "Waiting"}</div>
+            {sameSessionActiveInAnotherTab && <div>This session is already active in another tab.</div>}
           </div>
         </div>
       </DesktopWindow>
@@ -1550,7 +1641,7 @@ export default function Home() {
         </DesktopWindow>
       )}
 
-      {hasEnteredSystem && session && !session.is_active && session.status !== "ended" && state?.status !== "dead" && (
+      {isWaitingInQueue && session && (
         <div className="queue-overlay">
           <div className="queue-window">
             <WindowTitleBar title="System Busy" closable={false} staticTitle />
