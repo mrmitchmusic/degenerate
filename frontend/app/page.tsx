@@ -247,8 +247,6 @@ export default function Home() {
   const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const visualizerAvailableRef = useRef(false);
-  const visualizerTrailCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const visualizerMotionRef = useRef({ bass: 0, mid: 0, treble: 0, energy: 0 });
   const listenRef = useRef(0);
   const pauseRef = useRef(0);
   const sessionRef = useRef<SessionSnapshot | null>(null);
@@ -301,8 +299,8 @@ export default function Home() {
       if (!audioContextRef.current) {
         const context = new AudioContextCtor();
         const analyser = context.createAnalyser();
-        analyser.fftSize = 128;
-        analyser.smoothingTimeConstant = 0.9;
+        analyser.fftSize = 256;
+        analyser.smoothingTimeConstant = 0.85;
 
         const source = context.createMediaElementSource(audio);
         source.connect(analyser);
@@ -548,189 +546,163 @@ export default function Home() {
     if (!context) {
       return;
     }
+    const drawingContext = context;
 
-    const trailCanvas =
-      visualizerTrailCanvasRef.current ??
-      (() => {
-        const next = document.createElement("canvas");
-        next.width = canvas.width;
-        next.height = canvas.height;
-        visualizerTrailCanvasRef.current = next;
-        return next;
-      })();
-    const trailContext = trailCanvas.getContext("2d");
-    if (!trailContext) {
-      return;
+    type VisualizerBall = {
+      x: number;
+      y: number;
+      vx: number;
+      vy: number;
+      radius: number;
+      color: string;
+      shade: string;
+      highlight: string;
+    };
+
+    const width = canvas.width;
+    const height = canvas.height;
+    const waveform = new Uint8Array(analyser.fftSize);
+    const palette = [
+      { color: "#ca5d50", shade: "#8b3a31", highlight: "#f0b0a6" },
+      { color: "#d4a24c", shade: "#8e6a2b", highlight: "#f0d08f" },
+      { color: "#6d9d72", shade: "#476d4d", highlight: "#bad1b6" },
+      { color: "#688ab6", shade: "#415979", highlight: "#b4c7e2" },
+      { color: "#9b74b4", shade: "#644878", highlight: "#d5bce0" },
+      { color: "#b66c87", shade: "#7a465c", highlight: "#e3b9c7" },
+    ];
+    const balls: VisualizerBall[] = Array.from({ length: 8 }, (_, index) => {
+      const tone = palette[index % palette.length];
+      return {
+        x: 28 + Math.random() * (width - 56),
+        y: 28 + Math.random() * (height - 56),
+        vx: (Math.random() - 0.5) * 1.4,
+        vy: (Math.random() - 0.5) * 1.2,
+        radius: 11 + Math.random() * 6,
+        color: tone.color,
+        shade: tone.shade,
+        highlight: tone.highlight,
+      };
+    });
+
+    let smoothedEnergy = 0;
+    let previousSmoothedEnergy = 0;
+    let lastTriggerTime = 0;
+    const energyThreshold = 0.18;
+    const spikeThreshold = 0.045;
+    const triggerCooldownMs = 160;
+
+    function drawBall(ball: VisualizerBall) {
+      drawingContext.fillStyle = ball.color;
+      drawingContext.beginPath();
+      drawingContext.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+      drawingContext.fill();
+
+      drawingContext.strokeStyle = ball.shade;
+      drawingContext.lineWidth = 1.5;
+      drawingContext.beginPath();
+      drawingContext.arc(ball.x, ball.y, ball.radius - 0.75, Math.PI * 0.2, Math.PI * 1.45);
+      drawingContext.stroke();
+
+      drawingContext.fillStyle = ball.highlight;
+      drawingContext.beginPath();
+      drawingContext.arc(ball.x - ball.radius * 0.3, ball.y - ball.radius * 0.35, ball.radius * 0.35, 0, Math.PI * 2);
+      drawingContext.fill();
+
+      drawingContext.strokeStyle = "#3e3e3e";
+      drawingContext.lineWidth = 1;
+      drawingContext.beginPath();
+      drawingContext.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+      drawingContext.stroke();
     }
-    trailContext.clearRect(0, 0, trailCanvas.width, trailCanvas.height);
-    context.clearRect(0, 0, canvas.width, canvas.height);
 
-    const buffer = new Uint8Array(analyser.frequencyBinCount);
+    function drawFrameBackground() {
+      drawingContext.fillStyle = "#f1f1f1";
+      drawingContext.fillRect(0, 0, width, height);
+      drawingContext.fillStyle = "#e5e5e5";
+      drawingContext.fillRect(0, 0, width, 16);
+      drawingContext.fillStyle = "#d1d1d1";
+      drawingContext.fillRect(0, height - 14, width, 14);
+      drawingContext.strokeStyle = "#9a9a9a";
+      drawingContext.lineWidth = 1;
+      for (let x = 16; x < width; x += 32) {
+        drawingContext.beginPath();
+        drawingContext.moveTo(x, 0);
+        drawingContext.lineTo(x, height);
+        drawingContext.stroke();
+      }
+      drawingContext.strokeStyle = "#ffffff";
+      drawingContext.strokeRect(0.5, 0.5, width - 1, height - 1);
+      drawingContext.strokeStyle = "#7d7d7d";
+      drawingContext.strokeRect(1.5, 1.5, width - 3, height - 3);
+    }
 
     const draw = () => {
-      const width = canvas.width;
-      const height = canvas.height;
-      const time = performance.now() * 0.001;
-      const waveform = new Uint8Array(analyser?.fftSize ?? 64);
-
       if (visualizerAvailableRef.current && analyser && isPlayingRef.current && audioReady) {
-        analyser.getByteFrequencyData(buffer);
         analyser.getByteTimeDomainData(waveform);
       } else {
-        buffer.fill(0);
         waveform.fill(128);
       }
 
-      const rawBass = ((buffer[1] ?? 0) + (buffer[2] ?? 0) + (buffer[3] ?? 0)) / (255 * 3);
-      const rawMid = ((buffer[8] ?? 0) + (buffer[10] ?? 0) + (buffer[12] ?? 0)) / (255 * 3);
-      const rawTreble = ((buffer[20] ?? 0) + (buffer[24] ?? 0) + (buffer[28] ?? 0)) / (255 * 3);
-      const nextEnergy = Math.min(1, rawBass * 0.5 + rawMid * 0.3 + rawTreble * 0.2);
+      let energySum = 0;
+      for (let index = 0; index < waveform.length; index += 1) {
+        energySum += Math.abs((waveform[index] - 128) / 128);
+      }
+      const rawEnergy = energySum / waveform.length;
+      smoothedEnergy += (rawEnergy - smoothedEnergy) * 0.1;
+      const delta = smoothedEnergy - previousSmoothedEnergy;
+      previousSmoothedEnergy = smoothedEnergy;
 
-      visualizerMotionRef.current.bass += (rawBass - visualizerMotionRef.current.bass) * 0.12;
-      visualizerMotionRef.current.mid += (rawMid - visualizerMotionRef.current.mid) * 0.1;
-      visualizerMotionRef.current.treble += (rawTreble - visualizerMotionRef.current.treble) * 0.08;
-      visualizerMotionRef.current.energy += (nextEnergy - visualizerMotionRef.current.energy) * 0.1;
+      const now = performance.now();
+      const transientTriggered =
+        isPlayingRef.current &&
+        audioReady &&
+        smoothedEnergy > energyThreshold &&
+        delta > spikeThreshold &&
+        now - lastTriggerTime > triggerCooldownMs;
 
-      const bass = Math.min(0.8, visualizerMotionRef.current.bass);
-      const mid = Math.min(0.78, visualizerMotionRef.current.mid);
-      const treble = Math.min(0.75, visualizerMotionRef.current.treble);
-      const centerX = width / 2;
-      const centerY = height / 2;
-      const energy = Math.min(0.82, visualizerMotionRef.current.energy);
-      const hueShift = (time * 18) % 360;
-
-      trailContext.save();
-      trailContext.globalCompositeOperation = "source-over";
-      trailContext.fillStyle = `rgba(3, 2, 10, ${isPlayingRef.current ? 0.09 : 0.18})`;
-      trailContext.fillRect(0, 0, width, height);
-
-      trailContext.translate(centerX, centerY);
-      trailContext.rotate(0.0015 + bass * 0.01);
-      const zoom = 1.003 + energy * 0.008;
-      trailContext.scale(zoom, zoom);
-      trailContext.translate(-centerX, -centerY);
-      trailContext.drawImage(canvas, 0, 0, width, height);
-      trailContext.restore();
-
-      const background = trailContext.createRadialGradient(
-        centerX + Math.sin(time * 0.35) * (18 + bass * 30),
-        centerY + Math.cos(time * 0.48) * (14 + mid * 24),
-        6,
-        centerX,
-        centerY,
-        width * 0.72,
-      );
-      background.addColorStop(0, `hsla(${(hueShift + 260) % 360}, 72%, 14%, 0.18)`);
-      background.addColorStop(0.4, `hsla(${(hueShift + 140) % 360}, 78%, 20%, 0.08)`);
-      background.addColorStop(1, `hsla(${(hueShift + 300) % 360}, 65%, 5%, 0.02)`);
-      trailContext.fillStyle = background;
-      trailContext.fillRect(0, 0, width, height);
-
-      for (let tunnel = 0; tunnel < 18; tunnel += 1) {
-        const progress = tunnel / 18;
-        const radius = 22 + progress * 132 + bass * 14;
-        const hue = (hueShift + 102 + progress * 34 + Math.sin(time * 0.55 + tunnel) * 16) % 360;
-        const alpha = 0.06 + progress * 0.05;
-        trailContext.beginPath();
-        for (let step = 0; step <= 180; step += 1) {
-          const angle = (step / 180) * Math.PI * 2;
-          const waveIndex = Math.floor((step / 180) * waveform.length) % waveform.length;
-          const waveValue = ((waveform[waveIndex] ?? 128) - 128) / 128;
-          const spiral = angle + time * (0.22 + progress * 0.18);
-          const distortion =
-            Math.sin(spiral * 3 + time * 0.8 + tunnel * 0.3) * (6 + progress * 10 + mid * 10) +
-            Math.cos(spiral * 7 - time * 0.4) * (3 + treble * 10) +
-            waveValue * (8 + progress * 10);
-          const ellipse = 0.55 + progress * 0.65;
-          const x = centerX + Math.cos(spiral) * (radius + distortion);
-          const y = centerY + Math.sin(spiral) * (radius * ellipse + distortion * 0.82);
-          if (step === 0) {
-            trailContext.moveTo(x, y);
-          } else {
-            trailContext.lineTo(x, y);
-          }
+      if (transientTriggered) {
+        lastTriggerTime = now;
+        const impulseScale = 1 + Math.min(1.4, (smoothedEnergy - energyThreshold) * 4.5 + delta * 6);
+        for (const ball of balls) {
+          ball.vy -= (4 + Math.random() * 6) * impulseScale;
+          ball.vx += (-3 + Math.random() * 6) * impulseScale * 0.7;
         }
-        trailContext.strokeStyle = `hsla(${hue}, 96%, ${42 + progress * 25}%, ${alpha})`;
-        trailContext.lineWidth = 1 + progress * 2.2;
-        trailContext.stroke();
       }
 
-      trailContext.globalCompositeOperation = "screen";
-      for (let ribbon = 0; ribbon < 9; ribbon += 1) {
-        trailContext.beginPath();
-        for (let x = -12; x <= width + 12; x += 3) {
-          const waveIndex = Math.floor(((x + width) / (width + 24)) * waveform.length) % waveform.length;
-          const waveValue = ((waveform[waveIndex] ?? 128) - 128) / 128;
-          const drift = Math.sin(time * (0.7 + ribbon * 0.08) + x * 0.012 + ribbon) * (10 + bass * 16);
-          const y =
-            centerY +
-            Math.sin((x / width) * Math.PI * (1.5 + ribbon * 0.35) + time * (1 + ribbon * 0.12)) * (14 + ribbon * 4) +
-            waveValue * (14 + ribbon * 2.5) +
-            drift;
-          if (x <= -12) {
-            trailContext.moveTo(x, y);
-          } else {
-            trailContext.lineTo(x, y);
-          }
+      drawFrameBackground();
+
+      for (const ball of balls) {
+        ball.vx *= 0.98;
+        ball.vy *= 0.98;
+        ball.vy += 0.05;
+
+        ball.x += ball.vx;
+        ball.y += ball.vy;
+
+        if (ball.x - ball.radius <= 4) {
+          ball.x = ball.radius + 4;
+          ball.vx = Math.abs(ball.vx) * 0.88;
+        } else if (ball.x + ball.radius >= width - 4) {
+          ball.x = width - ball.radius - 4;
+          ball.vx = -Math.abs(ball.vx) * 0.88;
         }
-        trailContext.strokeStyle =
-          ribbon % 3 === 0
-            ? `hsla(${(hueShift + 120) % 360}, 100%, 64%, ${0.22 + ribbon * 0.03})`
-            : ribbon % 3 === 1
-              ? `hsla(${(hueShift + 340) % 360}, 100%, 62%, ${0.14 + ribbon * 0.025})`
-              : `hsla(${(hueShift + 230) % 360}, 100%, 68%, ${0.16 + ribbon * 0.025})`;
-        trailContext.lineWidth = 1.2 + ribbon * 0.3;
-        trailContext.stroke();
+
+        if (ball.y - ball.radius <= 4) {
+          ball.y = ball.radius + 4;
+          ball.vy = Math.abs(ball.vy) * 0.88;
+        } else if (ball.y + ball.radius >= height - 4) {
+          ball.y = height - ball.radius - 4;
+          ball.vy = -Math.abs(ball.vy) * 0.82;
+          ball.vx += (Math.random() - 0.5) * 0.25;
+        }
+
+        drawBall(ball);
       }
-
-      for (let spoke = 0; spoke < 36; spoke += 1) {
-        const angle = (spoke / 36) * Math.PI * 2 + time * (0.08 + treble * 0.3);
-        const waveIndex = spoke % waveform.length;
-        const waveValue = ((waveform[waveIndex] ?? 128) - 128) / 128;
-        const inner = 6 + spoke * 0.6;
-        const outer = 80 + bass * 56 + ((buffer[spoke % buffer.length] ?? 0) / 255) * 28;
-        const bend = Math.sin(time * 1.5 + spoke * 0.6) * (10 + mid * 12) + waveValue * 10;
-        const x1 = centerX + Math.cos(angle) * inner;
-        const y1 = centerY + Math.sin(angle) * inner;
-        const cx = centerX + Math.cos(angle + 0.22) * (outer * 0.55) + bend;
-        const cy = centerY + Math.sin(angle + 0.22) * (outer * 0.55) - bend * 0.7;
-        const x2 = centerX + Math.cos(angle + 0.05) * outer;
-        const y2 = centerY + Math.sin(angle + 0.05) * outer;
-        trailContext.strokeStyle =
-          spoke % 2 === 0
-            ? `hsla(${(hueShift + 118) % 360}, 100%, 60%, ${0.08 + treble * 0.35})`
-            : `hsla(${(hueShift + 350) % 360}, 100%, 58%, ${0.05 + mid * 0.2})`;
-        trailContext.lineWidth = 1 + (spoke % 4) * 0.45;
-        trailContext.beginPath();
-        trailContext.moveTo(x1, y1);
-        trailContext.quadraticCurveTo(cx, cy, x2, y2);
-        trailContext.stroke();
-      }
-
-      trailContext.globalCompositeOperation = "source-over";
-      const coreGlow = trailContext.createRadialGradient(centerX, centerY, 1, centerX, centerY, 20 + bass * 30);
-      coreGlow.addColorStop(0, `hsla(${(hueShift + 8) % 360}, 100%, 68%, 0.98)`);
-      coreGlow.addColorStop(0.2, `hsla(${(hueShift + 24) % 360}, 100%, 56%, 0.88)`);
-      coreGlow.addColorStop(0.45, `hsla(${(hueShift + 320) % 360}, 100%, 48%, 0.35)`);
-      coreGlow.addColorStop(1, `hsla(${(hueShift + 8) % 360}, 100%, 60%, 0)`);
-      trailContext.fillStyle = coreGlow;
-      trailContext.beginPath();
-      trailContext.arc(centerX, centerY, 20 + bass * 30, 0, Math.PI * 2);
-      trailContext.fill();
-
-      context.clearRect(0, 0, width, height);
-      context.drawImage(trailCanvas, 0, 0, width, height);
-      context.strokeStyle = `hsla(${(hueShift + 118) % 360}, 100%, 62%, 0.92)`;
-      context.lineWidth = 2;
-      context.strokeRect(1, 1, width - 2, height - 2);
-      context.strokeStyle = `hsla(${(hueShift + 350) % 360}, 78%, 28%, 0.94)`;
-      context.lineWidth = 3;
-      context.strokeRect(4, 4, width - 8, height - 8);
 
       if (!visualizerAvailableRef.current) {
-        context.fillStyle = "#d7d7d7";
-        context.font = '700 12px Charcoal, Geneva, sans-serif';
-        context.fillText("Visualizer unavailable in this browser", 12, height - 14);
+        drawingContext.fillStyle = "#5f5f5f";
+        drawingContext.font = "12px Charcoal, Geneva, sans-serif";
+        drawingContext.fillText("Visualizer unavailable in this browser", 12, height - 14);
       }
 
       animationFrameRef.current = window.requestAnimationFrame(draw);
