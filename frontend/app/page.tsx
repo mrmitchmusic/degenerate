@@ -588,8 +588,9 @@ export default function Home() {
 
     let smoothedEnergy = 0;
     let previousSmoothedEnergy = 0;
+    const energyHistory: number[] = [];
     let lastTriggerTime = 0;
-    const triggerCooldownMs = 160;
+    const triggerCooldownMs = 120;
 
     function drawBall(ball: VisualizerBall) {
       drawingContext.fillStyle = ball.color;
@@ -648,31 +649,44 @@ export default function Home() {
         energySum += Math.abs((waveform[index] - 128) / 128);
       }
       const rawEnergy = energySum / waveform.length;
-      smoothedEnergy += (rawEnergy - smoothedEnergy) * 0.1;
-      const delta = smoothedEnergy - previousSmoothedEnergy;
+      smoothedEnergy += (rawEnergy - smoothedEnergy) * 0.2;
+      const previousFrameEnergy = previousSmoothedEnergy;
+      energyHistory.push(smoothedEnergy);
+      if (energyHistory.length > 30) {
+        energyHistory.shift();
+      }
+      const avgEnergy =
+        energyHistory.length > 0 ? energyHistory.reduce((sum, value) => sum + value, 0) / energyHistory.length : smoothedEnergy;
+      const delta = smoothedEnergy - previousFrameEnergy;
       previousSmoothedEnergy = smoothedEnergy;
 
       const now = performance.now();
       if (isPlayingRef.current && now - visualizerDebugLogAtRef.current > 500) {
         visualizerDebugLogAtRef.current = now;
-        console.log("VIS_SAMPLE", waveform[0], "ENERGY", rawEnergy.toFixed(3), "DELTA", delta.toFixed(3));
-      }
-
-      const forceTestTrigger = isPlayingRef.current && audioReady && Math.random() < 0.02;
-      if (forceTestTrigger) {
-        console.log("VIS_TEST_TRIGGER");
+        console.log(
+          "VIS_SAMPLE",
+          waveform[0],
+          "ENERGY",
+          rawEnergy.toFixed(3),
+          "SMOOTH",
+          smoothedEnergy.toFixed(3),
+          "AVG",
+          avgEnergy.toFixed(3),
+        );
       }
 
       const transientTriggered =
         isPlayingRef.current &&
         audioReady &&
-        (delta > 0.02 || forceTestTrigger) &&
+        smoothedEnergy > avgEnergy * 1.3 &&
+        smoothedEnergy > previousFrameEnergy &&
         now - lastTriggerTime > triggerCooldownMs;
 
       if (transientTriggered) {
         lastTriggerTime = now;
-        console.log("TRANSIENT", { sample: waveform[0], energy: rawEnergy, delta });
-        const impulse = Math.max(8, Math.min(18, delta * 100));
+        const intensity = avgEnergy > 0 ? smoothedEnergy / avgEnergy : 1;
+        const impulse = Math.max(6, Math.min(16, intensity * 6));
+        console.log("TRANSIENT", { sample: waveform[0], energy: rawEnergy, smoothedEnergy, avgEnergy, intensity });
         for (const ball of balls) {
           ball.vy -= Math.max(8, 8 + Math.random() * 8);
           ball.vy -= impulse * 0.35;
