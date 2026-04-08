@@ -686,33 +686,33 @@ export default function Home() {
       const transientTriggered =
         isPlayingRef.current &&
         audioReady &&
-        smoothedEnergy > avgEnergy * 1.3 &&
+        smoothedEnergy > avgEnergy * 1.15 &&
         smoothedEnergy > previousFrameEnergy &&
         now - lastTriggerTime > triggerCooldownMs;
 
       if (transientTriggered) {
         lastTriggerTime = now;
         const intensity = avgEnergy > 0 ? smoothedEnergy / avgEnergy : 1;
-        const impulse = Math.max(6, Math.min(16, intensity * 6));
+        const impulse = Math.max(10, Math.min(22, intensity * 10));
         console.log("TRANSIENT", { sample: waveform[0], energy: rawEnergy, smoothedEnergy, avgEnergy, intensity });
         for (const ball of balls) {
-          const impulseX = (-4 + Math.random() * 8) * Math.min(1.1, impulse / 10);
-          const impulseY = (-6 + Math.random() * 4) * Math.min(1.2, impulse / 10);
-          ball.vx = lerp(ball.vx, ball.vx + impulseX, 0.5);
-          ball.vy = lerp(ball.vy, ball.vy + impulseY, 0.5);
+          const impulseX = (-6 + Math.random() * 12) * Math.min(1.35, impulse / 10);
+          const impulseY = (-10 + Math.random() * 6) * Math.min(1.5, impulse / 10);
+          ball.vx = lerp(ball.vx, ball.vx + impulseX, 0.72);
+          ball.vy = lerp(ball.vy, ball.vy + impulseY, 0.72);
         }
       }
 
       drawFrameBackground();
 
       for (const ball of balls) {
-        ball.vx += -0.015 + Math.random() * 0.03;
-        ball.vy += -0.015 + Math.random() * 0.03;
+        ball.vx += -0.03 + Math.random() * 0.06;
+        ball.vy += -0.03 + Math.random() * 0.06;
         ball.vx *= 0.995;
         ball.vy *= 0.995;
-        ball.vy += 0.08;
-        ball.vx = clamp(ball.vx, -5, 5);
-        ball.vy = clamp(ball.vy, -6, 6);
+        ball.vy += 0.03;
+        ball.vx = clamp(ball.vx, -6, 6);
+        ball.vy = clamp(ball.vy, -8, 8);
 
         ball.x += ball.vx;
         ball.y += ball.vy;
