@@ -550,6 +550,7 @@ export default function Home() {
     const drawingContext = context;
 
     type VisualizerBall = {
+      id: string;
       x: number;
       y: number;
       vx: number;
@@ -558,6 +559,9 @@ export default function Home() {
       color: string;
       shade: string;
       highlight: string;
+      ttl: number;
+      age: number;
+      highlightAngle: number;
     };
 
     function lerp(start: number, end: number, alpha: number) {
@@ -583,6 +587,7 @@ export default function Home() {
       const tone = palette[index % palette.length];
       const radius = 11 + Math.random() * 6;
       return {
+        id: crypto.randomUUID(),
         x: 28 + Math.random() * (width - 56),
         y: height * 0.55 + Math.random() * (height * 0.25 - radius),
         vx: -1 + Math.random() * 2,
@@ -591,6 +596,9 @@ export default function Home() {
         color: tone.color,
         shade: tone.shade,
         highlight: tone.highlight,
+        ttl: 999999,
+        age: 0,
+        highlightAngle: Math.random() * Math.PI * 2,
       };
     });
 
@@ -600,26 +608,44 @@ export default function Home() {
     let lastTriggerTime = 0;
     let triggerCursor = 0;
     const triggerCooldownMs = 120;
+    const maxBallCount = 40;
 
     function drawBall(ball: VisualizerBall) {
-      drawingContext.fillStyle = ball.color;
+      const lifeRatio = ball.ttl >= 999999 ? 1 : Math.max(0, 1 - ball.age / ball.ttl);
+      const glowGradient = drawingContext.createRadialGradient(
+        ball.x,
+        ball.y,
+        ball.radius * 0.2,
+        ball.x,
+        ball.y,
+        ball.radius * 1.6,
+      );
+      glowGradient.addColorStop(0, `${ball.highlight}${lifeRatio < 1 ? Math.round(lifeRatio * 255).toString(16).padStart(2, "0") : ""}`);
+      glowGradient.addColorStop(0.45, `${ball.color}${lifeRatio < 1 ? Math.round(lifeRatio * 210).toString(16).padStart(2, "0") : ""}`);
+      glowGradient.addColorStop(1, "rgba(0,0,0,0)");
+      drawingContext.fillStyle = glowGradient;
+      drawingContext.beginPath();
+      drawingContext.arc(ball.x, ball.y, ball.radius * 1.6, 0, Math.PI * 2);
+      drawingContext.fill();
+
+      const coreGradient = drawingContext.createRadialGradient(
+        ball.x - Math.cos(ball.highlightAngle) * ball.radius * 0.22,
+        ball.y - Math.sin(ball.highlightAngle) * ball.radius * 0.22,
+        ball.radius * 0.1,
+        ball.x,
+        ball.y,
+        ball.radius,
+      );
+      coreGradient.addColorStop(0, ball.highlight);
+      coreGradient.addColorStop(0.35, ball.color);
+      coreGradient.addColorStop(1, ball.shade);
+      drawingContext.fillStyle = coreGradient;
       drawingContext.beginPath();
       drawingContext.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
       drawingContext.fill();
 
-      drawingContext.strokeStyle = ball.shade;
-      drawingContext.lineWidth = 1.5;
-      drawingContext.beginPath();
-      drawingContext.arc(ball.x, ball.y, ball.radius - 0.75, Math.PI * 0.2, Math.PI * 1.45);
-      drawingContext.stroke();
-
-      drawingContext.fillStyle = ball.highlight;
-      drawingContext.beginPath();
-      drawingContext.arc(ball.x - ball.radius * 0.3, ball.y - ball.radius * 0.35, ball.radius * 0.35, 0, Math.PI * 2);
-      drawingContext.fill();
-
-      drawingContext.strokeStyle = "#3e3e3e";
-      drawingContext.lineWidth = 1;
+      drawingContext.strokeStyle = `rgba(255,255,255,${0.18 * lifeRatio})`;
+      drawingContext.lineWidth = 0.8;
       drawingContext.beginPath();
       drawingContext.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
       drawingContext.stroke();
@@ -725,6 +751,10 @@ export default function Home() {
       drawFrameBackground();
 
       for (const ball of balls) {
+        ball.age += 16;
+      }
+
+      for (const ball of balls) {
         ball.vx += -0.022 + Math.random() * 0.044;
         ball.vy += -0.022 + Math.random() * 0.044;
         ball.vx *= 0.997;
@@ -757,6 +787,63 @@ export default function Home() {
         }
 
         drawBall(ball);
+      }
+
+      for (let index = 0; index < balls.length; index += 1) {
+        const ball = balls[index];
+        for (let otherIndex = index + 1; otherIndex < balls.length; otherIndex += 1) {
+          const other = balls[otherIndex];
+          const dx = other.x - ball.x;
+          const dy = other.y - ball.y;
+          const distanceSq = dx * dx + dy * dy;
+          const minDistance = ball.radius + other.radius;
+          if (distanceSq === 0 || distanceSq > minDistance * minDistance) {
+            continue;
+          }
+
+          const distance = Math.sqrt(distanceSq);
+          const nx = dx / distance;
+          const ny = dy / distance;
+          const overlap = (minDistance - distance) * 0.5;
+
+          ball.x -= nx * overlap;
+          ball.y -= ny * overlap;
+          other.x += nx * overlap;
+          other.y += ny * overlap;
+
+          const ballVx = ball.vx;
+          const ballVy = ball.vy;
+          ball.vx = other.vx * 0.92;
+          ball.vy = other.vy * 0.92;
+          other.vx = ballVx * 0.92;
+          other.vy = ballVy * 0.92;
+
+          if (balls.length < maxBallCount && Math.random() < 0.08) {
+            const tone = palette[Math.floor(Math.random() * palette.length)];
+            const radius = 6 + Math.random() * 4;
+            balls.push({
+              id: crypto.randomUUID(),
+              x: (ball.x + other.x) * 0.5,
+              y: (ball.y + other.y) * 0.5,
+              vx: (ball.vx + other.vx) * 0.5 + (-1 + Math.random() * 2),
+              vy: (ball.vy + other.vy) * 0.5 + (-1 + Math.random() * 2),
+              radius,
+              color: tone.color,
+              shade: tone.shade,
+              highlight: tone.highlight,
+              ttl: 2600 + Math.random() * 2200,
+              age: 0,
+              highlightAngle: Math.random() * Math.PI * 2,
+            });
+          }
+        }
+      }
+
+      for (let index = balls.length - 1; index >= 0; index -= 1) {
+        const ball = balls[index];
+        if (ball.ttl < 999999 && ball.age >= ball.ttl) {
+          balls.splice(index, 1);
+        }
       }
 
       if (!visualizerAvailableRef.current) {
