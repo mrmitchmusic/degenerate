@@ -276,6 +276,78 @@ body {
   color: #8f1414;
 }
 
+.admin-card {
+  width: min(100%, 760px);
+}
+
+.admin-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.admin-metric,
+.admin-panel,
+.admin-session-card {
+  border: 1px solid #bdbdbd;
+  background: #ffffff;
+  padding: 8px;
+}
+
+.admin-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.admin-metric-label {
+  font-size: 11px;
+  color: #5f5f5f;
+}
+
+.admin-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.admin-panel h2 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.admin-session-card p {
+  margin: 0 0 4px;
+}
+
+.admin-session-card p:last-child {
+  margin-bottom: 0;
+}
+
+.admin-queue-table {
+  border: 1px solid #7b7b7b;
+  background: #ffffff;
+}
+
+.admin-queue-header,
+.admin-queue-row {
+  display: grid;
+  grid-template-columns: 48px 88px 1.4fr 1fr;
+  gap: 8px;
+  padding: 6px 8px;
+}
+
+.admin-queue-header {
+  background: #dfdfdf;
+  border-bottom: 1px solid #a4a4a4;
+  font-weight: 700;
+}
+
+.admin-queue-row + .admin-queue-row {
+  border-top: 1px solid #d5d5d5;
+}
+
 .upload-actions {
   display: flex;
   align-items: center;

@@ -484,6 +484,16 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    void fetch(`${API_URL}/visit`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ browser_session_id: getBrowserSessionId() }),
+    }).catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
     function syncActiveTab(event?: StorageEvent) {
       if (
         event &&

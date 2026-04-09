@@ -16,6 +16,7 @@ class PersistentState:
         self.data_dir = data_dir
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.state_path = self.data_dir / "state.json"
+        self.admin_stats_path = self.data_dir / "admin_stats.json"
         self.audio_path = self.data_dir / "mitch_os_88_master.wav"
         self._lock = asyncio.Lock()
 
@@ -30,11 +31,23 @@ class PersistentState:
             self.state_path.write_text(json.dumps(state.model_dump(), indent=2))
             return state
 
+    async def load_admin_stats(self) -> dict[str, object]:
+        async with self._lock:
+            return self._read_admin_stats_file()
+
+    async def save_admin_stats(self, stats: dict[str, object]) -> dict[str, object]:
+        async with self._lock:
+            normalized = self._normalize_admin_stats(stats)
+            self.admin_stats_path.write_text(json.dumps(normalized, indent=2))
+            return normalized
+
     def ensure_seed_audio(self) -> None:
         if self.audio_path.exists():
             if not self.state_path.exists():
                 seeded = self._sync_audio_metadata(GlobalState(filename=self.audio_path.name))
                 self.state_path.write_text(json.dumps(seeded.model_dump(), indent=2))
+            if not self.admin_stats_path.exists():
+                self.admin_stats_path.write_text(json.dumps(self._default_admin_stats(), indent=2))
             return
 
         import numpy as np
@@ -53,6 +66,8 @@ class PersistentState:
         sf.write(self.audio_path, stereo.astype("float32"), sample_rate, subtype="PCM_16")
         seeded = self._sync_audio_metadata(GlobalState(filename=self.audio_path.name))
         self.state_path.write_text(json.dumps(seeded.model_dump(), indent=2))
+        if not self.admin_stats_path.exists():
+            self.admin_stats_path.write_text(json.dumps(self._default_admin_stats(), indent=2))
 
     def replace_audio(self, source_path: Path, original_filename: str) -> GlobalState:
         shutil.copyfile(source_path, self.audio_path)
@@ -66,6 +81,35 @@ class PersistentState:
             self.state_path.write_text(json.dumps(seeded.model_dump(), indent=2))
             return seeded
         return GlobalState.model_validate_json(self.state_path.read_text())
+
+    def _read_admin_stats_file(self) -> dict[str, object]:
+        if not self.admin_stats_path.exists():
+            default_stats = self._default_admin_stats()
+            self.admin_stats_path.write_text(json.dumps(default_stats, indent=2))
+            return default_stats
+        try:
+            raw = json.loads(self.admin_stats_path.read_text())
+        except json.JSONDecodeError:
+            raw = self._default_admin_stats()
+        normalized = self._normalize_admin_stats(raw)
+        self.admin_stats_path.write_text(json.dumps(normalized, indent=2))
+        return normalized
+
+    def _default_admin_stats(self) -> dict[str, object]:
+        return {
+            "visit_count": 0,
+            "session_count": 0,
+            "seen_browser_session_ids": [],
+        }
+
+    def _normalize_admin_stats(self, stats: dict[str, object]) -> dict[str, object]:
+        seen_ids = stats.get("seen_browser_session_ids")
+        normalized_ids = [str(item) for item in seen_ids] if isinstance(seen_ids, list) else []
+        return {
+            "visit_count": max(0, int(stats.get("visit_count", len(normalized_ids)) or 0)),
+            "session_count": max(0, int(stats.get("session_count", 0) or 0)),
+            "seen_browser_session_ids": normalized_ids,
+        }
 
     def _sync_audio_metadata(self, state: GlobalState) -> GlobalState:
         if not self.audio_path.exists():

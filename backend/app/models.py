@@ -41,6 +41,14 @@ class OpenSessionPayload(BaseModel):
         return (self.browser_session_id or self.client_id or "").strip()
 
 
+class BrowserSessionPayload(BaseModel):
+    browser_session_id: str | None = Field(default=None, min_length=1)
+    client_id: str | None = Field(default=None, min_length=1)
+
+    def resolved_browser_session_id(self) -> str:
+        return (self.browser_session_id or self.client_id or "").strip()
+
+
 class HeartbeatPayload(BaseModel):
     listened_seconds: float = Field(ge=0.0)
     paused_seconds: float = Field(ge=0.0)
@@ -51,3 +59,24 @@ class EndSessionPayload(BaseModel):
     listened_seconds: float = Field(ge=0.0)
     paused_seconds: float = Field(ge=0.0)
     reason: Literal["completed", "disconnect", "pause_limit", "manual", "dead"] = "manual"
+
+
+class AdminSessionInfo(BaseModel):
+    session_id: str
+    browser_session_id: str
+    status: Literal["queued", "active", "ended"]
+    queue_position: int = 0
+    ip_address: str | None = None
+    listened_seconds: float = 0.0
+    paused_seconds: float = 0.0
+    created_at: float
+    started_at: float | None = None
+    last_heartbeat: float | None = None
+
+
+class AdminOverview(BaseModel):
+    state: GlobalState
+    visit_count: int = 0
+    session_count: int = 0
+    active_session: AdminSessionInfo | None = None
+    queue: list[AdminSessionInfo] = Field(default_factory=list)

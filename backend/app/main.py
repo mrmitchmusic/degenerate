@@ -9,13 +9,23 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import soundfile as sf
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi import File, Header, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 from .audio_engine import calculate_contribution, is_audio_alive, mutate_audio_file
-from .models import EndSessionPayload, GlobalState, HeartbeatPayload, OpenSessionPayload, SessionOpenResponse, SessionSnapshot
+from .models import (
+    AdminOverview,
+    AdminSessionInfo,
+    BrowserSessionPayload,
+    EndSessionPayload,
+    GlobalState,
+    HeartbeatPayload,
+    OpenSessionPayload,
+    SessionOpenResponse,
+    SessionSnapshot,
+)
 from .state import PersistentState
 
 
@@ -32,6 +42,7 @@ class SessionRecord:
     browser_session_id: str
     created_at: float
     queue_entered_at: float
+    ip_address: str | None = None
     status: str = "queued"
     listened_seconds: float = 0.0
     paused_seconds: float = 0.0
@@ -46,6 +57,7 @@ class MitchOs88Service:
         self.state_store = PersistentState(DATA_DIR)
         self.state_store.ensure_seed_audio()
         self.state: GlobalState = GlobalState()
+        self.admin_stats: dict[str, object] = {"visit_count": 0, "session_count": 0, "seen_browser_session_ids": []}
         self._lock = asyncio.Lock()
         self._queue: deque[str] = deque()
         self._sessions: dict[str, SessionRecord] = {}
@@ -53,6 +65,7 @@ class MitchOs88Service:
 
     async def start(self) -> None:
         self.state = await self.state_store.load()
+        self.admin_stats = await self.state_store.load_admin_stats()
         self._stale_task = asyncio.create_task(self._expire_stale_sessions())
 
     async def stop(self) -> None:
@@ -63,7 +76,17 @@ class MitchOs88Service:
             except asyncio.CancelledError:
                 pass
 
-    async def open_session(self, browser_session_id: str) -> SessionSnapshot:
+    async def record_visit(self, browser_session_id: str) -> int:
+        async with self._lock:
+            seen_ids = set(str(item) for item in self.admin_stats.get("seen_browser_session_ids", []))
+            if browser_session_id and browser_session_id not in seen_ids:
+                seen_ids.add(browser_session_id)
+                self.admin_stats["seen_browser_session_ids"] = sorted(seen_ids)
+                self.admin_stats["visit_count"] = len(seen_ids)
+                self.admin_stats = await self.state_store.save_admin_stats(self.admin_stats)
+            return int(self.admin_stats.get("visit_count", 0))
+
+    async def open_session(self, browser_session_id: str, ip_address: str | None = None) -> SessionSnapshot:
         async with self._lock:
             for record in self._sessions.values():
                 if (
@@ -71,6 +94,7 @@ class MitchOs88Service:
                     and not record.finalized
                     and record.status != "ended"
                 ):
+                    record.ip_address = ip_address or record.ip_address
                     if record.status != "active":
                         self._ensure_session_queued_locked(record.session_id)
                     self._promote_next_locked()
@@ -83,21 +107,35 @@ class MitchOs88Service:
                 browser_session_id=browser_session_id,
                 created_at=now,
                 queue_entered_at=now,
+                ip_address=ip_address,
             )
             self._sessions[session_id] = record
             self._ensure_session_queued_locked(session_id)
             self._promote_next_locked()
             return self._snapshot_locked(session_id)
 
-    async def get_session(self, session_id: str, browser_session_id: str | None = None) -> SessionSnapshot:
+    async def get_session(
+        self,
+        session_id: str,
+        browser_session_id: str | None = None,
+        ip_address: str | None = None,
+    ) -> SessionSnapshot:
         async with self._lock:
-            self._require_owned_session_locked(session_id, browser_session_id)
+            record = self._require_owned_session_locked(session_id, browser_session_id)
+            record.ip_address = ip_address or record.ip_address
             self._promote_next_locked()
             return self._snapshot_locked(session_id)
 
-    async def heartbeat(self, session_id: str, browser_session_id: str, payload: HeartbeatPayload) -> SessionSnapshot:
+    async def heartbeat(
+        self,
+        session_id: str,
+        browser_session_id: str,
+        payload: HeartbeatPayload,
+        ip_address: str | None = None,
+    ) -> SessionSnapshot:
         async with self._lock:
             record = self._require_owned_session_locked(session_id, browser_session_id)
+            record.ip_address = ip_address or record.ip_address
             if record.status == "ended":
                 return self._snapshot_locked(session_id)
             if not record.status == "active":
@@ -112,9 +150,16 @@ class MitchOs88Service:
                 await self._finalize_session_locked(record, "pause_limit")
             return self._snapshot_locked(session_id)
 
-    async def end_session(self, session_id: str, browser_session_id: str, payload: EndSessionPayload) -> SessionSnapshot:
+    async def end_session(
+        self,
+        session_id: str,
+        browser_session_id: str,
+        payload: EndSessionPayload,
+        ip_address: str | None = None,
+    ) -> SessionSnapshot:
         async with self._lock:
             record = self._require_owned_session_locked(session_id, browser_session_id)
+            record.ip_address = ip_address or record.ip_address
             if record.status != "active":
                 return self._snapshot_locked(session_id)
             if record.status != "ended":
@@ -155,6 +200,25 @@ class MitchOs88Service:
             await upload.close()
             temp_path.unlink(missing_ok=True)
 
+    async def admin_overview(self) -> AdminOverview:
+        async with self._lock:
+            self.state = await self.state_store.load()
+            self.admin_stats = await self.state_store.load_admin_stats()
+            active_record = self._active_session_locked()
+            queue_items = [
+                self._admin_session_info_locked(record, index + 1)
+                for index, session_id in enumerate(self._queue)
+                if (record := self._sessions.get(session_id)) is not None and not record.finalized and record.status != "ended"
+            ]
+            active_info = self._admin_session_info_locked(active_record, 0) if active_record is not None else None
+            return AdminOverview(
+                state=self.state,
+                visit_count=int(self.admin_stats.get("visit_count", 0)),
+                session_count=int(self.admin_stats.get("session_count", 0)),
+                active_session=active_info,
+                queue=queue_items,
+            )
+
     async def _finalize_session_locked(self, record: SessionRecord, reason: str) -> None:
         if record.finalized:
             return
@@ -169,6 +233,8 @@ class MitchOs88Service:
         contribution = calculate_contribution(record.listened_seconds, self.state.duration_seconds)
         self.state.total_damage += contribution
         self.state.play_count += contribution
+        self.admin_stats["session_count"] = int(self.admin_stats.get("session_count", 0)) + 1
+        self.admin_stats = await self.state_store.save_admin_stats(self.admin_stats)
 
         if self.state.status == "alive":
             alive = mutate_audio_file(self.state_store.audio_path, self.state.total_damage)
@@ -278,6 +344,22 @@ class MitchOs88Service:
             estimated_wait_seconds=estimated_wait,
         )
 
+    def _admin_session_info_locked(self, record: SessionRecord | None, queue_position: int) -> AdminSessionInfo | None:
+        if record is None:
+            return None
+        return AdminSessionInfo(
+            session_id=record.session_id,
+            browser_session_id=record.browser_session_id,
+            status="ended" if record.status == "ended" else ("active" if record.status == "active" else "queued"),
+            queue_position=queue_position,
+            ip_address=record.ip_address,
+            listened_seconds=record.listened_seconds,
+            paused_seconds=record.paused_seconds,
+            created_at=record.created_at,
+            started_at=record.started_at,
+            last_heartbeat=record.last_heartbeat,
+        )
+
 
 service = MitchOs88Service()
 app = FastAPI(title="Mitch OS 88")
@@ -312,27 +394,44 @@ async def admin_status() -> dict[str, bool]:
     return {"upload_enabled": bool(ADMIN_TOKEN)}
 
 
+def _require_admin_token(admin_token: str | None) -> None:
+    if not ADMIN_TOKEN:
+        raise HTTPException(status_code=503, detail="Admin access is disabled until MITCH_OS_88_ADMIN_TOKEN is configured")
+    if admin_token != ADMIN_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid admin token")
+
+
 @app.get("/state", response_model=GlobalState)
 async def get_state() -> GlobalState:
     return await service.global_state()
 
 
 @app.post("/session/open", response_model=SessionOpenResponse)
-async def open_session(payload: OpenSessionPayload) -> SessionOpenResponse:
+async def open_session(payload: OpenSessionPayload, request: Request) -> SessionOpenResponse:
     browser_session_id = payload.resolved_browser_session_id()
     if not browser_session_id:
         raise HTTPException(status_code=400, detail="browser_session_id is required")
-    session = await service.open_session(browser_session_id)
+    session = await service.open_session(browser_session_id, request.client.host if request.client else None)
     state = await service.global_state()
     return SessionOpenResponse(session=session, state=state)
+
+
+@app.post("/visit")
+async def record_visit(payload: BrowserSessionPayload) -> dict[str, int]:
+    browser_session_id = payload.resolved_browser_session_id()
+    if not browser_session_id:
+        raise HTTPException(status_code=400, detail="browser_session_id is required")
+    visit_count = await service.record_visit(browser_session_id)
+    return {"visit_count": visit_count}
 
 
 @app.get("/session/{session_id}", response_model=SessionSnapshot)
 async def get_session(
     session_id: str,
     browser_session_id: str | None = Header(default=None, alias="X-Browser-Session-Id"),
+    request: Request = None,
 ) -> SessionSnapshot:
-    return await service.get_session(session_id, browser_session_id)
+    return await service.get_session(session_id, browser_session_id, request.client.host if request and request.client else None)
 
 
 @app.post("/session/{session_id}/heartbeat", response_model=SessionSnapshot)
@@ -340,10 +439,11 @@ async def heartbeat(
     session_id: str,
     payload: HeartbeatPayload,
     browser_session_id: str | None = Header(default=None, alias="X-Browser-Session-Id"),
+    request: Request = None,
 ) -> SessionSnapshot:
     if not browser_session_id:
         raise HTTPException(status_code=400, detail="X-Browser-Session-Id header is required")
-    return await service.heartbeat(session_id, browser_session_id, payload)
+    return await service.heartbeat(session_id, browser_session_id, payload, request.client.host if request and request.client else None)
 
 
 @app.post("/session/{session_id}/end", response_model=SessionSnapshot)
@@ -351,10 +451,11 @@ async def end_session(
     session_id: str,
     payload: EndSessionPayload,
     browser_session_id: str | None = Header(default=None, alias="X-Browser-Session-Id"),
+    request: Request = None,
 ) -> SessionSnapshot:
     if not browser_session_id:
         raise HTTPException(status_code=400, detail="X-Browser-Session-Id header is required")
-    return await service.end_session(session_id, browser_session_id, payload)
+    return await service.end_session(session_id, browser_session_id, payload, request.client.host if request and request.client else None)
 
 
 @app.get("/audio/current")
@@ -380,8 +481,13 @@ async def upload_audio(
     file: UploadFile = File(...),
     admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
 ) -> GlobalState:
-    if not ADMIN_TOKEN:
-        raise HTTPException(status_code=503, detail="Admin uploads are disabled until MITCH_OS_88_ADMIN_TOKEN is configured")
-    if admin_token != ADMIN_TOKEN:
-        raise HTTPException(status_code=401, detail="Invalid admin token")
+    _require_admin_token(admin_token)
     return await service.replace_audio_upload(file)
+
+
+@app.get("/admin/overview", response_model=AdminOverview)
+async def get_admin_overview(
+    admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
+) -> AdminOverview:
+    _require_admin_token(admin_token)
+    return await service.admin_overview()

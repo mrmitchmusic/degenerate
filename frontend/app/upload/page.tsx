@@ -108,6 +108,9 @@ export default function UploadPage() {
               <button type="submit" className="system-button" disabled={isSubmitting}>
                 {isSubmitting ? "Uploading..." : "Replace Live Track"}
               </button>
+              <Link href="/admin" className="upload-link">
+                Admin Dashboard
+              </Link>
               <Link href="/" className="upload-link">
                 Back to Mitch OS 88
               </Link>
