@@ -3,9 +3,9 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
+import { getApiUrl } from "@/lib/api";
 import type { AdminOverview } from "@/lib/types";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 const ADMIN_TOKEN_STORAGE_KEY = "mitch-os-88-admin-token";
 
 function formatSeconds(value: number) {
@@ -54,7 +54,7 @@ export default function AdminPage() {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${API_URL}/admin/overview`, {
+      const response = await fetch(getApiUrl("/admin/overview"), {
         headers: {
           "X-Admin-Token": token,
         },

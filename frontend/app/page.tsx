@@ -3,9 +3,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { DesktopWindow, WindowTitleBar } from "@/components/DesktopWindow";
+import { getApiUrl } from "@/lib/api";
 import type { GlobalState, SessionOpenResponse, SessionSnapshot } from "@/lib/types";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 const SESSION_STORAGE_KEY = "mitch-os-88-session-id";
 const BROWSER_SESSION_STORAGE_KEY = "mitch-os-88-browser-session-id";
 const LEGACY_CLIENT_STORAGE_KEY = "mitch-os-88-client-id";
@@ -447,7 +447,7 @@ export default function Home() {
 
   async function openFreshSession() {
     if (!openingSessionPromise) {
-      openingSessionPromise = fetch(`${API_URL}/session/open`, {
+      openingSessionPromise = fetch(getApiUrl("/session/open"), {
         method: "POST",
         headers: { "Content-Type": "application/json", ...getBrowserSessionHeaders() },
         body: JSON.stringify({ browser_session_id: getBrowserSessionId() }),
@@ -484,7 +484,7 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    void fetch(`${API_URL}/visit`, {
+    void fetch(getApiUrl("/visit"), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -777,7 +777,7 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    fetch(`${API_URL}/state`)
+    fetch(getApiUrl("/state"))
       .then((response) => response.json() as Promise<GlobalState>)
       .then(setState)
       .catch(console.error);
@@ -815,8 +815,8 @@ export default function Home() {
     const poll = window.setInterval(async () => {
       try {
         const [sessionResponse, stateResponse] = await Promise.all([
-          fetch(`${API_URL}/session/${activeSessionId}`, { headers: getBrowserSessionHeaders() }),
-          fetch(`${API_URL}/state`),
+          fetch(getApiUrl(`/session/${activeSessionId}`), { headers: getBrowserSessionHeaders() }),
+          fetch(getApiUrl("/state")),
         ]);
         const statePayload: GlobalState = await stateResponse.json();
         if (!sessionResponse.ok) {
@@ -856,7 +856,7 @@ export default function Home() {
       const listenedSeconds = current ? Math.max(listenRef.current, current.currentTime) : listenRef.current;
       listenRef.current = listenedSeconds;
       try {
-        const response = await fetch(`${API_URL}/session/${activeSessionId}/heartbeat`, {
+        const response = await fetch(getApiUrl(`/session/${activeSessionId}/heartbeat`), {
           method: "POST",
           headers: { "Content-Type": "application/json", ...getBrowserSessionHeaders() },
           body: JSON.stringify({
@@ -938,7 +938,7 @@ export default function Home() {
         return;
       }
       releaseActiveTab();
-      void fetch(`${API_URL}/session/${currentSessionId}/end`, {
+      void fetch(getApiUrl(`/session/${currentSessionId}/end`), {
         method: "POST",
         headers: { "Content-Type": "application/json", ...getBrowserSessionHeaders() },
         body: JSON.stringify({
@@ -969,7 +969,7 @@ export default function Home() {
       return;
     }
     releaseActiveTab();
-    const response = await fetch(`${API_URL}/session/${activeSessionId}/end`, {
+    const response = await fetch(getApiUrl(`/session/${activeSessionId}/end`), {
       method: "POST",
       headers: { "Content-Type": "application/json", ...getBrowserSessionHeaders() },
       body: JSON.stringify({
@@ -980,7 +980,7 @@ export default function Home() {
     });
     const payload: SessionSnapshot = await response.json();
     setSession(payload);
-    const stateResponse = await fetch(`${API_URL}/state`);
+    const stateResponse = await fetch(getApiUrl("/state"));
     const statePayload: GlobalState = await stateResponse.json();
     setState(statePayload);
     resetPlayerState();
@@ -1018,7 +1018,7 @@ export default function Home() {
       setAudioDebug("blocked: missing audio element");
       return;
     }
-    const nextSrc = `${API_URL}/audio/current?session=${currentSession.session_id}&browser_session_id=${encodeURIComponent(
+    const nextSrc = `${getApiUrl("/audio/current")}?session=${currentSession.session_id}&browser_session_id=${encodeURIComponent(
       getBrowserSessionId(),
     )}`;
     const currentAudio = audioRef.current;

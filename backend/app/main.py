@@ -32,7 +32,10 @@ from .state import PersistentState
 BASE_DIR = Path(__file__).resolve().parents[1]
 DATA_DIR = Path(os.getenv("MITCH_OS_88_DATA_DIR", str(BASE_DIR / "data"))).resolve()
 ALLOWED_ORIGINS = [origin.strip() for origin in os.getenv("MITCH_OS_88_ALLOWED_ORIGINS", "*").split(",") if origin.strip()]
-ALLOWED_ORIGIN_REGEX = os.getenv("MITCH_OS_88_ALLOWED_ORIGIN_REGEX", r"^https://.*\.vercel\.app$")
+ALLOWED_ORIGIN_REGEX = os.getenv(
+    "MITCH_OS_88_ALLOWED_ORIGIN_REGEX",
+    r"^https://((.*\.vercel\.app)|mrmit\.ch|www\.mrmit\.ch)$",
+)
 ADMIN_TOKEN = os.getenv("MITCH_OS_88_ADMIN_TOKEN", "").strip()
 
 

@@ -3,9 +3,9 @@
 import Link from "next/link";
 import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 
+import { getApiUrl } from "@/lib/api";
 import type { GlobalState } from "@/lib/types";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 const ADMIN_TOKEN_STORAGE_KEY = "mitch-os-88-admin-token";
 
 export default function UploadPage() {
@@ -50,7 +50,7 @@ export default function UploadPage() {
     setUploadedState(null);
 
     try {
-      const response = await fetch(`${API_URL}/admin/upload`, {
+      const response = await fetch(getApiUrl("/admin/upload"), {
         method: "POST",
         headers: adminToken ? { "X-Admin-Token": adminToken } : undefined,
         body: formData,
