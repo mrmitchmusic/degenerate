@@ -462,19 +462,17 @@ body {
   display: inline-block;
   position: relative;
   background-repeat: no-repeat;
-  background-size: 32px 32px;
+  background-position: center;
+  background-size: 30px 30px;
   image-rendering: pixelated;
 }
 
 .icon-audio {
-  background-image: url("/images/mitch-logo-tiny.png");
-  background-position: center;
-  background-size: 28px 28px;
-  filter: contrast(1.15);
+  background-image: url("/images/desktop-icon-audio-system7.svg");
 }
 
 .icon-readme {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' shape-rendering='crispEdges'%3E%3Cpath fill='%23000' d='M3 8h18v1H3zm18 1h3v1h-3zm3 1h2v1h-2zm2 1h1v10h-1zm-23 0h1v13H3zm23 0h1v13h-1zM4 24h22v1H4z'/%3E%3Cpath fill='%23d8c96a' d='M4 9h17v1H4zm17 1h3v1h-3zm3 1h1v10h-1zM4 10h20v13H4z'/%3E%3Cpath fill='%23fff4bd' d='M5 10h15v1H5zm15 1h3v1h-3zM5 11h18v12H5z'/%3E%3Cpath fill='%236c6654' d='M8 14h11v1H8zm0 3h11v1H8zm0 3h8v1H8z'/%3E%3C/svg%3E");
+  background-image: url("/images/desktop-icon-readme-system7.svg");
 }
 
 .icon-queue {
@@ -482,25 +480,19 @@ body {
 }
 
 .icon-folder {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' shape-rendering='crispEdges'%3E%3Cpath fill='%23000' d='M5 8h8v1H5zm8 1h3v1h-3zm3 1h10v1H16zm-12 1h23v1H4zm0 1h1v10H4zm22 0h1v10h-1zM5 22h21v1H5z'/%3E%3Cpath fill='%236a68d8' d='M5 9h8v1H5zm8 1h3v1h-3zm3 1h10v1H16z'/%3E%3Cpath fill='%23b9b6ff' d='M5 10h8v1H5zm8 1h3v1h-3z'/%3E%3Cpath fill='%23dad9ff' d='M5 11h21v11H5z'/%3E%3Cpath fill='%23a09ef2' d='M6 12h19v9H6z'/%3E%3C/svg%3E");
+  background-image: url("/images/desktop-icon-folder-system7.svg");
 }
 
 .icon-apple-music {
   background-image: url("/images/apple-music-icon-system7.svg");
-  background-position: center;
-  background-size: 30px 30px;
-  image-rendering: pixelated;
 }
 
 .icon-spotify {
   background-image: url("/images/spotify-icon-system7.svg");
-  background-position: center;
-  background-size: 30px 30px;
-  image-rendering: pixelated;
 }
 
 .icon-visualizer {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' shape-rendering='crispEdges'%3E%3Cpath fill='%23000' d='M4 6h24v1H4zm24 1h1v18h-1zm-24 0h1v18H4zm1 18h24v1H5z'/%3E%3Cpath fill='%23dbdbdb' d='M5 7h23v18H5z'/%3E%3Cpath fill='%23fff' d='M6 8h21v16H6z'/%3E%3Cpath fill='%23d5d5d5' d='M7 9h19v12H7z'/%3E%3Cpath fill='%236b68d8' d='M9 18h2v-4H9zm4 0h2v-7h-2zm4 0h2v-10h-2zm4 0h2v-6h-2z'/%3E%3Cpath fill='%23cfcaff' d='M9 14h2v1H9zm4-3h2v1h-2zm4-3h2v1h-2zm4 4h2v1h-2z'/%3E%3Cpath fill='%23858585' d='M10 23h12v1H10z'/%3E%3C/svg%3E");
+  background-image: url("/images/desktop-icon-visualizer-system7.svg");
 }
 
 .icon-social-tiktok,

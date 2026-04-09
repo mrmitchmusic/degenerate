@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 128 128" shape-rendering="crispEdges">
+  <path fill="#1b1b1b" d="M18 22h72v4H18zm72 4h10v4H90zm10 4h6v4h-6zm6 4h4v60h-4zM14 34h4v74h-4zm92 0h4v74h-4zM18 108h92v4H18z"/>
+  <path fill="#d6d6e8" d="M18 26h72v4H18zm72 4h10v4H90zm10 4h6v4h-6zM18 34h88v74H18z"/>
+  <path fill="#ffffff" d="M22 34h64v4H22zm64 4h14v4H86zM22 38h78v66H22z"/>
+  <path fill="#ececf8" d="M26 42h66v50H26z"/>
+  <path fill="#d0d0e4" d="M92 42h4v50h-4zm-66 50h66v4H26z"/>
+  <rect x="34" y="48" width="28" height="28" fill="#ffffff"/>
+  <rect x="34" y="48" width="28" height="4" fill="#ffffff"/>
+  <rect x="34" y="48" width="4" height="28" fill="#ffffff"/>
+  <rect x="58" y="52" width="4" height="24" fill="#9898b7"/>
+  <rect x="38" y="72" width="24" height="4" fill="#9898b7"/>
+  <rect x="66" y="50" width="12" height="4" fill="#6b68d8"/>
+  <rect x="66" y="58" width="18" height="4" fill="#6b68d8"/>
+  <rect x="66" y="66" width="14" height="4" fill="#6b68d8"/>
+  <path fill="#1b1b1b" d="M34 48h28v4H34zm0 4h4v20h-4zm24 0h4v24h-4zM38 72h20v4H38z"/>
+  <image href="/images/mitch-logo-tiny.png" x="36" y="50" width="24" height="24" preserveAspectRatio="xMidYMid meet"/>
+</svg>
