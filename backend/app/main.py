@@ -333,7 +333,7 @@ class MitchOs88Service:
         if record.status == "queued":
             active = next((item for item in self._sessions.values() if item.status == "active" and not item.finalized), None)
             remaining = max(0.0, self.state.duration_seconds - active.listened_seconds) if active else 0.0
-            estimated_wait = remaining + max(0.0, (queue_position - 2) * self.state.duration_seconds)
+            estimated_wait = remaining + max(0.0, (queue_position - 1) * self.state.duration_seconds)
 
         return SessionSnapshot(
             session_id=record.session_id,
