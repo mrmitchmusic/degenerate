@@ -21,7 +21,7 @@ const ICON_HEIGHT = 88;
 
 type DesktopItem = {
   id: string;
-  label: string;
+  label: string | null;
   iconClassName: string;
   x: number;
   y: number;
@@ -30,7 +30,7 @@ type DesktopItem = {
 };
 
 const DEFAULT_DESKTOP_ITEMS: DesktopItem[] = [
-  { id: "audio", label: "mitch_os_88_master.wav", iconClassName: "icon-audio", x: 1120, y: 48 },
+  { id: "audio", label: null, iconClassName: "icon-audio", x: 1120, y: 48 },
   { id: "readme", label: "Read Me", iconClassName: "icon-readme", x: 1120, y: 140 },
   { id: "visualizer", label: "Visualiser", iconClassName: "icon-visualizer", x: 1120, y: 232 },
   {
@@ -527,7 +527,7 @@ export default function Home() {
   useEffect(() => {
     setDesktopItems((current) =>
       current.map((item) =>
-        item.id === "audio" ? { ...item, label: state?.filename ?? "mitch_os_88_master.wav" } : item,
+        item.id === "audio" ? { ...item, label: state?.filename ?? null } : item,
       ),
     );
   }, [state?.filename]);
@@ -1501,7 +1501,7 @@ export default function Home() {
             }}
           >
             <span className={`${item.iconClassName} platinum-icon`} />
-            <span>{item.label}</span>
+            {item.label ? <span>{item.label}</span> : null}
           </button>
         ))}
       </aside>
