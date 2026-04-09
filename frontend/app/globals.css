@@ -468,7 +468,9 @@ body {
 }
 
 .icon-audio {
-  background-image: url("/images/desktop-icon-audio-system7.svg");
+  background-image: url("/images/mitch-logo-tiny.png");
+  background-size: 28px 28px;
+  filter: contrast(1.15);
 }
 
 .icon-readme {
