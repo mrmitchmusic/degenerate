@@ -549,145 +549,96 @@ export default function Home() {
     }
     const drawingContext = context;
 
-    type VisualizerBall = {
-      id: string;
-      x: number;
-      y: number;
-      vx: number;
-      vy: number;
-      radius: number;
-      color: string;
-      shade: string;
-      highlight: string;
-      ttl: number;
-      age: number;
-      highlightAngle: number;
-    };
-
-    function lerp(start: number, end: number, alpha: number) {
-      return start + (end - start) * alpha;
-    }
-
-    function clamp(value: number, min: number, max: number) {
-      return Math.min(max, Math.max(min, value));
-    }
-
     const width = canvas.width;
     const height = canvas.height;
     const waveform = new Uint8Array(analyser.fftSize);
-    const palette = [
-      { color: "#ca5d50", shade: "#8b3a31", highlight: "#f0b0a6" },
-      { color: "#d4a24c", shade: "#8e6a2b", highlight: "#f0d08f" },
-      { color: "#6d9d72", shade: "#476d4d", highlight: "#bad1b6" },
-      { color: "#688ab6", shade: "#415979", highlight: "#b4c7e2" },
-      { color: "#9b74b4", shade: "#644878", highlight: "#d5bce0" },
-      { color: "#b66c87", shade: "#7a465c", highlight: "#e3b9c7" },
-    ];
-    const balls: VisualizerBall[] = Array.from({ length: 8 }, (_, index) => {
-      const tone = palette[index % palette.length];
-      const radius = 11 + Math.random() * 6;
-      return {
-        id: crypto.randomUUID(),
-        x: 28 + Math.random() * (width - 56),
-        y: height * 0.55 + Math.random() * (height * 0.25 - radius),
-        vx: -1 + Math.random() * 2,
-        vy: -2 + Math.random() * 4,
-        radius,
-        color: tone.color,
-        shade: tone.shade,
-        highlight: tone.highlight,
-        ttl: 999999,
-        age: 0,
-        highlightAngle: Math.random() * Math.PI * 2,
-      };
-    });
-
+    const imageData = drawingContext.createImageData(width, height);
+    const pixels = imageData.data;
     let smoothedEnergy = 0;
-    let previousSmoothedEnergy = 0;
-    const energyHistory: number[] = [];
-    let lastTriggerTime = 0;
-    let triggerCursor = 0;
-    const triggerCooldownMs = 120;
-    const maxBallCount = 40;
 
-    function drawBall(ball: VisualizerBall) {
-      const lifeRatio = ball.ttl >= 999999 ? 1 : Math.max(0, 1 - ball.age / ball.ttl);
-      const glowGradient = drawingContext.createRadialGradient(
-        ball.x,
-        ball.y,
-        ball.radius * 0.2,
-        ball.x,
-        ball.y,
-        ball.radius * 1.6,
-      );
-      glowGradient.addColorStop(0, `${ball.highlight}${lifeRatio < 1 ? Math.round(lifeRatio * 255).toString(16).padStart(2, "0") : ""}`);
-      glowGradient.addColorStop(0.45, `${ball.color}${lifeRatio < 1 ? Math.round(lifeRatio * 210).toString(16).padStart(2, "0") : ""}`);
-      glowGradient.addColorStop(1, "rgba(0,0,0,0)");
-      drawingContext.fillStyle = glowGradient;
-      drawingContext.beginPath();
-      drawingContext.arc(ball.x, ball.y, ball.radius * 1.6, 0, Math.PI * 2);
-      drawingContext.fill();
-
-      const coreGradient = drawingContext.createRadialGradient(
-        ball.x - Math.cos(ball.highlightAngle) * ball.radius * 0.22,
-        ball.y - Math.sin(ball.highlightAngle) * ball.radius * 0.22,
-        ball.radius * 0.1,
-        ball.x,
-        ball.y,
-        ball.radius,
-      );
-      coreGradient.addColorStop(0, ball.highlight);
-      coreGradient.addColorStop(0.35, ball.color);
-      coreGradient.addColorStop(1, ball.shade);
-      drawingContext.fillStyle = coreGradient;
-      drawingContext.beginPath();
-      drawingContext.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
-      drawingContext.fill();
-
-      drawingContext.strokeStyle = `rgba(255,255,255,${0.18 * lifeRatio})`;
-      drawingContext.lineWidth = 0.8;
-      drawingContext.beginPath();
-      drawingContext.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
-      drawingContext.stroke();
+    function mixChannel(a: number, b: number, t: number) {
+      return a + (b - a) * t;
     }
 
-    function drawFrameBackground() {
-      const time = performance.now() * 0.00018;
-      const hue = (time * 360) % 360;
-      const centerX = width * (0.5 + Math.sin(time * 2.1) * 0.08);
-      const centerY = height * (0.48 + Math.cos(time * 1.4) * 0.07);
+    function colorRamp(value: number) {
+      const stops = [
+        [255, 80, 176],
+        [224, 66, 255],
+        [255, 125, 52],
+        [255, 220, 96],
+        [110, 240, 120],
+        [82, 230, 255],
+      ] as const;
+      const scaled = value * (stops.length - 1);
+      const index = Math.min(stops.length - 2, Math.floor(scaled));
+      const localT = scaled - index;
+      const start = stops[index];
+      const end = stops[index + 1];
+      return [
+        mixChannel(start[0], end[0], localT),
+        mixChannel(start[1], end[1], localT),
+        mixChannel(start[2], end[2], localT),
+      ] as const;
+    }
 
-      drawingContext.fillStyle = "#040404";
-      drawingContext.fillRect(0, 0, width, height);
+    function drawField(strength: number) {
+      const time = performance.now() * 0.00028;
+      const beat = performance.now() * 0.001 * (133 / 60);
+      const beatPulse = 1 + Math.sin(beat * Math.PI * 2) * 0.05;
+      const amplitude = (1 + strength * 0.45) * beatPulse;
+      const scaleA = 0.024 + Math.sin(time * 0.9) * 0.002;
+      const scaleB = 0.017 + Math.cos(time * 0.6) * 0.002;
+      const scaleC = 0.012 + Math.sin(time * 0.4) * 0.0015;
 
-      const portalGradient = drawingContext.createRadialGradient(centerX, centerY, 8, centerX, centerY, width * 0.62);
-      portalGradient.addColorStop(0, `hsla(${hue + 40}, 90%, 62%, 0.22)`);
-      portalGradient.addColorStop(0.18, `hsla(${hue + 110}, 88%, 48%, 0.18)`);
-      portalGradient.addColorStop(0.42, `hsla(${hue + 210}, 86%, 42%, 0.1)`);
-      portalGradient.addColorStop(1, "rgba(0,0,0,0)");
-      drawingContext.fillStyle = portalGradient;
-      drawingContext.fillRect(0, 0, width, height);
+      let pointer = 0;
+      for (let y = 0; y < height; y += 1) {
+        const yf = (y - height * 0.5) / height;
+        for (let x = 0; x < width; x += 1) {
+          const xf = (x - width * 0.5) / width;
+          const fieldA =
+            Math.sin(x * scaleA + time * 2.3) +
+            Math.sin(y * scaleA * 1.12 - time * 1.55) +
+            Math.sin((x + y) * scaleA * 0.58 + time * 2.9);
+          const fieldB =
+            Math.sin((x * 0.82 - y * 0.36) * scaleB - time * 1.2) +
+            Math.sin((y * 1.14 + x * 0.22) * scaleB + time * 1.7);
+          const fieldC =
+            Math.sin((xf * xf + yf * yf) * 42 - time * 3.2) +
+            Math.sin((xf - yf) * 18 + time * 1.6);
 
-      drawingContext.lineWidth = 1;
-      for (let ring = 0; ring < 6; ring += 1) {
-        const ringRadius = 22 + ring * 24 + Math.sin(time * 12 + ring) * 3;
-        drawingContext.strokeStyle = `hsla(${(hue + ring * 28) % 360}, 95%, ${55 - ring * 4}%, ${0.16 - ring * 0.018})`;
-        drawingContext.beginPath();
-        drawingContext.ellipse(
-          centerX + Math.sin(time * 6 + ring) * 4,
-          centerY + Math.cos(time * 5 + ring) * 3,
-          ringRadius * 1.15,
-          ringRadius * 0.72,
-          time * 5 + ring * 0.2,
-          0,
-          Math.PI * 2,
-        );
-        drawingContext.stroke();
+          const combined = fieldA * 0.45 + fieldB * 0.32 + fieldC * 0.23;
+          const normalized = Math.max(0, Math.min(1, combined * 0.125 * amplitude + 0.5));
+          const contrast = Math.pow(normalized, 0.88);
+          const [r, g, b] = colorRamp(contrast);
+          const luminanceBoost = 0.86 + strength * 0.28;
+
+          pixels[pointer] = Math.min(255, r * luminanceBoost);
+          pixels[pointer + 1] = Math.min(255, g * luminanceBoost);
+          pixels[pointer + 2] = Math.min(255, b * luminanceBoost);
+          pixels[pointer + 3] = 255;
+          pointer += 4;
+        }
       }
 
-      drawingContext.strokeStyle = "#1c1c1c";
+      drawingContext.putImageData(imageData, 0, 0);
+
+      const veil = drawingContext.createRadialGradient(
+        width * (0.5 + Math.sin(time * 1.3) * 0.1),
+        height * (0.5 + Math.cos(time * 1.1) * 0.08),
+        12,
+        width * 0.5,
+        height * 0.5,
+        width * 0.72,
+      );
+      veil.addColorStop(0, "rgba(255,255,255,0.08)");
+      veil.addColorStop(0.4, "rgba(255,255,255,0.03)");
+      veil.addColorStop(1, "rgba(0,0,0,0.18)");
+      drawingContext.fillStyle = veil;
+      drawingContext.fillRect(0, 0, width, height);
+
+      drawingContext.strokeStyle = "rgba(18,18,18,0.9)";
       drawingContext.strokeRect(0.5, 0.5, width - 1, height - 1);
-      drawingContext.strokeStyle = "#4d4d4d";
+      drawingContext.strokeStyle = "rgba(92,92,92,0.9)";
       drawingContext.strokeRect(1.5, 1.5, width - 3, height - 3);
     }
 
@@ -704,15 +655,6 @@ export default function Home() {
       }
       const rawEnergy = energySum / waveform.length;
       smoothedEnergy += (rawEnergy - smoothedEnergy) * 0.2;
-      const previousFrameEnergy = previousSmoothedEnergy;
-      energyHistory.push(smoothedEnergy);
-      if (energyHistory.length > 30) {
-        energyHistory.shift();
-      }
-      const avgEnergy =
-        energyHistory.length > 0 ? energyHistory.reduce((sum, value) => sum + value, 0) / energyHistory.length : smoothedEnergy;
-      const delta = smoothedEnergy - previousFrameEnergy;
-      previousSmoothedEnergy = smoothedEnergy;
 
       const now = performance.now();
       if (isPlayingRef.current && now - visualizerDebugLogAtRef.current > 500) {
@@ -724,127 +666,10 @@ export default function Home() {
           rawEnergy.toFixed(3),
           "SMOOTH",
           smoothedEnergy.toFixed(3),
-          "AVG",
-          avgEnergy.toFixed(3),
         );
       }
 
-      const transientTriggered =
-        isPlayingRef.current &&
-        audioReady &&
-        smoothedEnergy > avgEnergy * 1.15 &&
-        smoothedEnergy > previousFrameEnergy &&
-        now - lastTriggerTime > triggerCooldownMs;
-
-      if (transientTriggered) {
-        lastTriggerTime = now;
-        const intensity = avgEnergy > 0 ? smoothedEnergy / avgEnergy : 1;
-        const impulse = Math.max(8, Math.min(18, intensity * 8));
-        const targetBall = balls[triggerCursor % balls.length];
-        triggerCursor += 1;
-        const impulseX = (-5 + Math.random() * 10) * Math.min(1.15, impulse / 10);
-        const impulseY = (-7 + Math.random() * 4) * Math.min(1.2, impulse / 10);
-        targetBall.vx = lerp(targetBall.vx, targetBall.vx + impulseX, 0.34);
-        targetBall.vy = lerp(targetBall.vy, targetBall.vy + impulseY, 0.34);
-      }
-
-      drawFrameBackground();
-
-      for (const ball of balls) {
-        ball.age += 16;
-      }
-
-      for (const ball of balls) {
-        ball.vx += -0.022 + Math.random() * 0.044;
-        ball.vy += -0.022 + Math.random() * 0.044;
-        ball.vx *= 0.997;
-        ball.vy *= 0.997;
-        ball.vy += 0.012;
-        ball.vx = clamp(ball.vx, -6, 6);
-        ball.vy = clamp(ball.vy, -8, 8);
-
-        ball.x += ball.vx;
-        ball.y += ball.vy;
-
-        if (ball.x - ball.radius <= 4) {
-          ball.x = ball.radius + 4;
-          ball.vx *= -0.48;
-          ball.vy *= -0.48;
-        } else if (ball.x + ball.radius >= width - 4) {
-          ball.x = width - ball.radius - 4;
-          ball.vx *= -0.48;
-          ball.vy *= -0.48;
-        }
-
-        if (ball.y - ball.radius <= 4) {
-          ball.y = ball.radius + 4;
-          ball.vx *= -0.48;
-          ball.vy *= -0.48;
-        } else if (ball.y + ball.radius > height - 4) {
-          ball.y = height - ball.radius - 4;
-          ball.vx *= -0.48;
-          ball.vy *= -0.48;
-        }
-
-        drawBall(ball);
-      }
-
-      for (let index = 0; index < balls.length; index += 1) {
-        const ball = balls[index];
-        for (let otherIndex = index + 1; otherIndex < balls.length; otherIndex += 1) {
-          const other = balls[otherIndex];
-          const dx = other.x - ball.x;
-          const dy = other.y - ball.y;
-          const distanceSq = dx * dx + dy * dy;
-          const minDistance = ball.radius + other.radius;
-          if (distanceSq === 0 || distanceSq > minDistance * minDistance) {
-            continue;
-          }
-
-          const distance = Math.sqrt(distanceSq);
-          const nx = dx / distance;
-          const ny = dy / distance;
-          const overlap = (minDistance - distance) * 0.5;
-
-          ball.x -= nx * overlap;
-          ball.y -= ny * overlap;
-          other.x += nx * overlap;
-          other.y += ny * overlap;
-
-          const ballVx = ball.vx;
-          const ballVy = ball.vy;
-          ball.vx = other.vx * 0.92;
-          ball.vy = other.vy * 0.92;
-          other.vx = ballVx * 0.92;
-          other.vy = ballVy * 0.92;
-
-          if (balls.length < maxBallCount && Math.random() < 0.08) {
-            const tone = palette[Math.floor(Math.random() * palette.length)];
-            const radius = 6 + Math.random() * 4;
-            balls.push({
-              id: crypto.randomUUID(),
-              x: (ball.x + other.x) * 0.5,
-              y: (ball.y + other.y) * 0.5,
-              vx: (ball.vx + other.vx) * 0.5 + (-1 + Math.random() * 2),
-              vy: (ball.vy + other.vy) * 0.5 + (-1 + Math.random() * 2),
-              radius,
-              color: tone.color,
-              shade: tone.shade,
-              highlight: tone.highlight,
-              ttl: 2600 + Math.random() * 2200,
-              age: 0,
-              highlightAngle: Math.random() * Math.PI * 2,
-            });
-          }
-        }
-      }
-
-      for (let index = balls.length - 1; index >= 0; index -= 1) {
-        const ball = balls[index];
-        if (ball.ttl < 999999 && ball.age >= ball.ttl) {
-          balls.splice(index, 1);
-        }
-      }
+      drawField(isPlayingRef.current && audioReady ? smoothedEnergy : 0.04);
 
       if (!visualizerAvailableRef.current) {
         drawingContext.fillStyle = "#5f5f5f";
