@@ -148,6 +148,23 @@ body {
 .mobile-progress-frame,
 .mobile-integrity-frame {
   width: 100%;
+  display: block;
+}
+
+.mobile-progress-frame {
+  height: 14px;
+}
+
+.mobile-integrity-frame {
+  height: 12px;
+}
+
+.mobile-player-body .integrity-row {
+  width: 100%;
+}
+
+.mobile-player-body .integrity-row .meter-frame {
+  flex: 1;
 }
 
 .mobile-readme-body {
