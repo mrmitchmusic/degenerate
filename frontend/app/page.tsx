@@ -55,7 +55,6 @@ const DEFAULT_DESKTOP_ITEMS: DesktopItem[] = [
     iconClassName: "icon-mailing-list",
     x: 1120,
     y: 508,
-    href: "https://0a026ca3.sibforms.com/serve/MUIFADeSGI6f9MdcaIxws8gsQIhKTdNbBFk31R6KC5u6VSSeksoqqttCBdD6F0dfuctR_kTZ-QvCMRucy1ILGwm7wf9HS-t8DF8fGsd214O7uIvqCuxF5JM9vqdNWscE2S0y2zpIvBdlOD-dWNRIqqFmSForYiPN_pTk6oiPh0UfgHgMyI7-CwkwSr_PvGsaG-fXlS6cMzVSgNMo",
   },
 ];
 
@@ -237,7 +236,8 @@ export default function Home() {
   const [booting, setBooting] = useState(false);
   const [readMeOpen, setReadMeOpen] = useState(true);
   const [visualizerOpen, setVisualizerOpen] = useState(false);
-  const [frontWindow, setFrontWindow] = useState<"player" | "readme" | "visualizer">("player");
+  const [mailingListOpen, setMailingListOpen] = useState(false);
+  const [frontWindow, setFrontWindow] = useState<"player" | "readme" | "visualizer" | "mailing-list">("player");
   const [isPlaying, setIsPlaying] = useState(false);
   const [pauseElapsed, setPauseElapsed] = useState(0);
   const [audioReady, setAudioReady] = useState(false);
@@ -1102,6 +1102,11 @@ export default function Home() {
       setFrontWindow("visualizer");
       return;
     }
+    if (item.id === "mailing-list") {
+      setMailingListOpen(true);
+      setFrontWindow("mailing-list");
+      return;
+    }
     if (item.id === "readme") {
       setReadMeOpen(true);
       setFrontWindow("readme");
@@ -1385,6 +1390,19 @@ export default function Home() {
               </section>
             )}
 
+            {mailingListOpen && (
+              <section className="mobile-panel">
+                <WindowTitleBar title="Mailing List" onClose={() => setMailingListOpen(false)} staticTitle />
+                <div className="window-body mobile-panel-body mailing-list-panel-body">
+                  <iframe
+                    title="Mailing List"
+                    src="/mailing-list-form"
+                    className="mailing-list-frame"
+                  />
+                </div>
+              </section>
+            )}
+
             {readMeOpen && (
               <section className="mobile-panel">
                 <WindowTitleBar title="Read Me" onClose={() => setReadMeOpen(false)} staticTitle />
@@ -1600,6 +1618,28 @@ export default function Home() {
               <span>{state?.filename ?? "No file"}</span>
               <span>{isPlaying ? "Reacting to playback" : "Press Play to begin"}</span>
             </div>
+          </div>
+        </DesktopWindow>
+      )}
+
+      {hasEnteredSystem && mailingListOpen && (
+        <DesktopWindow
+          title="Mailing List"
+          initialPosition={{ x: 690, y: 334 }}
+          width={360}
+          height={326}
+          scale={desktopScale}
+          zIndex={frontWindow === "mailing-list" ? 20 : 10}
+          onFocus={() => setFrontWindow("mailing-list")}
+          closable
+          onClose={() => setMailingListOpen(false)}
+        >
+          <div className="mailing-list-panel-body">
+            <iframe
+              title="Mailing List"
+              src="/mailing-list-form"
+              className="mailing-list-frame"
+            />
           </div>
         </DesktopWindow>
       )}
