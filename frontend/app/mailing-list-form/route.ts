@@ -119,7 +119,6 @@ const injectedStyle = `
 
     #error-message,
     #success-message {
-      display: none;
       max-width: none !important;
       margin: 0 0 8px !important;
       padding: 6px 8px !important;
@@ -128,11 +127,6 @@ const injectedStyle = `
       color: #111 !important;
       font-size: 12px !important;
       text-align: left !important;
-    }
-
-    #error-message[data-visible="true"],
-    #success-message[data-visible="true"] {
-      display: block !important;
     }
 
     .sib-form-message-panel__inner-text {
@@ -145,109 +139,20 @@ const injectedStyle = `
   </style>
 `;
 
-const injectedScript = `
-  <script id="mitch-mailing-list-script">
-    (() => {
-      const errorPanel = () => document.getElementById('error-message');
-      const successPanel = () => document.getElementById('success-message');
-
-      const hidePanels = () => {
-        [errorPanel(), successPanel()].forEach((panel) => {
-          if (!panel) return;
-          panel.setAttribute('data-visible', 'false');
-        });
-      };
-
-      const updatePanels = () => {
-        const error = errorPanel();
-        const success = successPanel();
-        if (error) {
-          const text = (error.textContent || '').trim().toLowerCase();
-          if (text && !text.includes('could not be saved')) {
-            error.setAttribute('data-visible', 'true');
-            const inner = error.querySelector('.sib-form-message-panel__inner-text');
-            if (inner) inner.textContent = 'Submission failed. Retry.';
-          } else {
-            error.setAttribute('data-visible', 'false');
-          }
-        }
-        if (success) {
-          const text = (success.textContent || '').trim();
-          if (text) {
-            success.setAttribute('data-visible', 'true');
-            const inner = success.querySelector('.sib-form-message-panel__inner-text');
-            if (inner) inner.textContent = 'Subscription successful.';
-          } else {
-            success.setAttribute('data-visible', 'false');
-          }
-        }
-      };
-
-      const setup = () => {
-        const form = document.getElementById('sib-form');
-        if (!form) return false;
-
-        const input = document.getElementById('EMAIL');
-        const label = document.querySelector('label[for="EMAIL"]');
-        const submit = form.querySelector('button[type="submit"], input[type="submit"]');
-
-        if (input instanceof HTMLInputElement) {
-          input.type = 'email';
-          input.placeholder = 'user@domain.com';
-        }
-
-        if (label) {
-          label.textContent = 'Email Address';
-        }
-
-        if (submit instanceof HTMLInputElement) {
-          submit.value = 'Subscribe';
-        } else if (submit instanceof HTMLElement) {
-          submit.textContent = 'Subscribe';
-        }
-
-        form.setAttribute('action', ${JSON.stringify(BREVO_FORM_URL)});
-        form.setAttribute('target', '_self');
-
-        hidePanels();
-        updatePanels();
-
-        form.addEventListener('submit', () => {
-          hidePanels();
-        });
-
-        const observer = new MutationObserver(updatePanels);
-        if (errorPanel()) observer.observe(errorPanel(), { childList: true, subtree: true, characterData: true });
-        if (successPanel()) observer.observe(successPanel(), { childList: true, subtree: true, characterData: true });
-
-        return true;
-      };
-
-      let tries = 0;
-      const timer = setInterval(() => {
-        tries += 1;
-        if (setup() || tries > 20) {
-          clearInterval(timer);
-        }
-      }, 300);
-
-      document.addEventListener('DOMContentLoaded', setup, { once: true });
-      window.addEventListener('load', setup, { once: true });
-    })();
-  </script>
-`;
-
 function transformBrevoHtml(html: string) {
   const withBase = html.includes("</head>")
-    ? html.replace("</head>", `<base href="${BREVO_FORM_BASE_URL}">${injectedStyle}${injectedScript}</head>`)
-    : `<base href="${BREVO_FORM_BASE_URL}">${injectedStyle}${injectedScript}${html}`;
+    ? html.replace("</head>", `<base href="${BREVO_FORM_BASE_URL}">${injectedStyle}</head>`)
+    : `<base href="${BREVO_FORM_BASE_URL}">${injectedStyle}${html}`;
 
   return withBase
+    .replace(/(<div\s+id="error-message"[\s\S]*?style=")([^"]*)"/i, '$1display:none;$2"')
+    .replace(/(<div\s+id="success-message"[\s\S]*?style=")([^"]*)"/i, '$1display:none;$2"')
     .replace(/<div style="padding:\s*8px 0;">\s*<div[\s\S]*?Mr\. Mitch Mailing List[\s\S]*?<\/div>\s*<\/div>/i, "")
     .replace(/<div style="padding:\s*8px 0;">\s*<div class="sib-form-block"[\s\S]*?Subscribe to the newsletter and stay updated\.[\s\S]*?<\/div>\s*<\/div>/i, "")
     .replace(/<div style="padding:\s*8px 0;">\s*<div[\s\S]*?sib-image-form-block[\s\S]*?<\/div>\s*<\/div>/i, "")
     .replace(/Enter your email address to subscribe/gi, "Email Address")
     .replace(/placeholder="EMAIL"/gi, 'placeholder="user@domain.com"')
+    .replace(/<form([\s\S]*?)action=""/i, `<form$1action="${BREVO_FORM_URL}"`)
     .replace(/>\s*SUBSCRIBE\s*</g, ">Subscribe<");
 }
 
