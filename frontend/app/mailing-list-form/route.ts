@@ -1,6 +1,7 @@
 const BREVO_FORM_URL =
   "https://0a026ca3.sibforms.com/serve/MUIFADeSGI6f9MdcaIxws8gsQIhKTdNbBFk31R6KC5u6VSSeksoqqttCBdD6F0dfuctR_kTZ-QvCMRucy1ILGwm7wf9HS-t8DF8fGsd214O7uIvqCuxF5JM9vqdNWscE2S0y2zpIvBdlOD-dWNRIqqFmSForYiPN_pTk6oiPh0UfgHgMyI7-CwkwSr_PvGsaG-fXlS6cMzVSgNMo";
 const BREVO_FORM_BASE_URL = "https://0a026ca3.sibforms.com/";
+const LOCAL_FORM_ACTION = "/mailing-list-form";
 
 export const dynamic = "force-dynamic";
 
@@ -152,6 +153,7 @@ function transformBrevoHtml(html: string) {
     .replace(/<div style="padding:\s*8px 0;">\s*<div[\s\S]*?sib-image-form-block[\s\S]*?<\/div>\s*<\/div>/i, "")
     .replace(/Enter your email address to subscribe/gi, "Email Address")
     .replace(/placeholder="EMAIL"/gi, 'placeholder="user@domain.com"')
+    .replace(/<form([^>]*id="sib-form"[^>]*)action=""/i, `<form$1action="${LOCAL_FORM_ACTION}"`)
     .replace(/>\s*SUBSCRIBE\s*</g, ">Subscribe<");
 }
 
