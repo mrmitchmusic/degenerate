@@ -497,6 +497,10 @@ body {
   background-image: url("/images/desktop-icon-visualizer-system7.svg");
 }
 
+.icon-mailing-list {
+  background-image: url("/images/desktop-icon-mailing-list-system7.svg");
+}
+
 .icon-social-tiktok,
 .icon-social-instagram,
 .icon-social-youtube,

@@ -49,6 +49,14 @@ const DEFAULT_DESKTOP_ITEMS: DesktopItem[] = [
     y: 416,
     href: "https://open.spotify.com/artist/2XiGESIh2E2ockoVUG4NGv?si=k3_kuL2YQ0S_ELxVxL2yGQ",
   },
+  {
+    id: "mailing-list",
+    label: "Mailing List",
+    iconClassName: "icon-mailing-list",
+    x: 1120,
+    y: 508,
+    href: "https://0a026ca3.sibforms.com/serve/MUIFADeSGI6f9MdcaIxws8gsQIhKTdNbBFk31R6KC5u6VSSeksoqqttCBdD6F0dfuctR_kTZ-QvCMRucy1ILGwm7wf9HS-t8DF8fGsd214O7uIvqCuxF5JM9vqdNWscE2S0y2zpIvBdlOD-dWNRIqqFmSForYiPN_pTk6oiPh0UfgHgMyI7-CwkwSr_PvGsaG-fXlS6cMzVSgNMo",
+  },
 ];
 
 const MENU_DEFINITIONS = {
