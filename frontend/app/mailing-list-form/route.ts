@@ -2,6 +2,7 @@ const BREVO_FORM_URL =
   "https://0a026ca3.sibforms.com/serve/MUIFADeSGI6f9MdcaIxws8gsQIhKTdNbBFk31R6KC5u6VSSeksoqqttCBdD6F0dfuctR_kTZ-QvCMRucy1ILGwm7wf9HS-t8DF8fGsd214O7uIvqCuxF5JM9vqdNWscE2S0y2zpIvBdlOD-dWNRIqqFmSForYiPN_pTk6oiPh0UfgHgMyI7-CwkwSr_PvGsaG-fXlS6cMzVSgNMo";
 
 export const dynamic = "force-dynamic";
+const BREVO_FORM_BASE_URL = "https://0a026ca3.sibforms.com/";
 
 const injectedStyle = `
   <style id="mitch-mailing-list-style">
@@ -58,24 +59,6 @@ const injectedStyle = `
       border: 0 !important;
       padding: 0 !important;
       margin: 0 0 8px !important;
-    }
-
-    .mitch-mailing-list-copy {
-      border: 1px solid #7b7b7b;
-      background: #e0e0e0;
-      box-shadow: inset 1px 1px 0 #ffffff, inset -1px -1px 0 #b9b9b9 !important;
-      padding: 10px;
-      margin-bottom: 10px;
-    }
-
-    .mitch-mailing-list-copy h1 {
-      margin: 0 0 6px;
-      font-size: 13px !important;
-      font-weight: 700 !important;
-    }
-
-    .mitch-mailing-list-copy p {
-      margin: 0;
     }
 
     label,
@@ -139,6 +122,12 @@ const injectedStyle = `
     a {
       color: #111 !important;
     }
+
+    .sib-form-message-panel:empty,
+    .entry__error:empty,
+    .sib-form-block__error:empty {
+      display: none !important;
+    }
   </style>
 `;
 
@@ -154,14 +143,6 @@ const injectedScript = `
 
         doc.querySelectorAll('img, .sib-form-block__image, .image-container, .header-banner, .sib-form-block--image')
           .forEach((node) => node.remove());
-
-        if (!doc.querySelector('.mitch-mailing-list-copy')) {
-          const copy = doc.createElement('div');
-          copy.className = 'mitch-mailing-list-copy';
-          copy.innerHTML =
-            '<h1>Mailing List Subscription</h1><p>Register email address to receive system updates.</p>';
-          form.parentElement?.insertBefore(copy, form);
-        }
 
         const emailInput =
           form.querySelector('input[type="email"]') ||
@@ -195,18 +176,15 @@ const injectedScript = `
         doc.querySelectorAll('.sib-form-block__description, .sib-text-form-block, .sib-form-block__image')
           .forEach((node) => {
             if (!(node instanceof HTMLElement)) return;
-            if (node.closest('.mitch-mailing-list-copy')) return;
             const text = (node.textContent || '').trim();
             if (text) node.style.display = 'none';
           });
 
-        doc.querySelectorAll('.sib-form-message-panel, .entry__error, .sib-form-block__error').forEach((node) => {
-          const element = node;
-          const text = (element.textContent || '').toLowerCase();
-          if (text.includes('success') || text.includes('confirm') || text.includes('subscribed')) {
-            element.textContent = 'Subscription successful.';
-          } else if (text) {
-            element.textContent = 'Submission failed. Retry.';
+        doc.querySelectorAll('h1, h2, .sib-form-block__header, .sib-form-block__sub-title, .sib-text-form-block').forEach((node) => {
+          if (!(node instanceof HTMLElement)) return;
+          const text = (node.textContent || '').toLowerCase();
+          if (text.includes('mailing list') || text.includes('provide your email') || text.includes('subscribe')) {
+            node.style.display = 'none';
           }
         });
       };
@@ -241,9 +219,10 @@ export async function GET() {
     }
 
     const html = await response.text();
+    const baseTag = `<base href="${BREVO_FORM_BASE_URL}">`;
     const withHeadInjection = html.includes("</head>")
-      ? html.replace("</head>", `${injectedStyle}${injectedScript}</head>`)
-      : `${injectedStyle}${injectedScript}${html}`;
+      ? html.replace("</head>", `${baseTag}${injectedStyle}${injectedScript}</head>`)
+      : `${baseTag}${injectedStyle}${injectedScript}${html}`;
 
     return new Response(withHeadInjection, {
       headers: {
@@ -260,10 +239,7 @@ export async function GET() {
           ${injectedStyle}
         </head>
         <body>
-          <div class="mitch-mailing-list-copy">
-            <h1>Mailing List Subscription</h1>
-            <p>Submission failed. Retry.</p>
-          </div>
+          <div style="border:1px solid #7b7b7b;background:#efefef;padding:8px;">Unable to load mailing list form.</div>
         </body>
       </html>`;
     return new Response(fallback, {
