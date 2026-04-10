@@ -12,6 +12,7 @@ const LEGACY_CLIENT_STORAGE_KEY = "mitch-os-88-client-id";
 const TAB_STORAGE_KEY = "mitch-os-88-tab-id";
 const ACTIVE_CONTROLLER_TAB_STORAGE_KEY = "active_controller_tab";
 const LEGACY_ACTIVE_TAB_STORAGE_KEY = "mitch-os-88-active-tab";
+const ACTIVE_CONTROLLER_TTL_MS = 15000;
 let openingSessionPromise: Promise<SessionOpenResponse> | null = null;
 const DESKTOP_WIDTH = 1280;
 const DESKTOP_HEIGHT = 800;
@@ -220,10 +221,31 @@ function getTabId() {
 }
 
 function getStoredActiveControllerTab() {
-  return (
+  const raw =
     window.localStorage.getItem(ACTIVE_CONTROLLER_TAB_STORAGE_KEY) ??
-    window.localStorage.getItem(LEGACY_ACTIVE_TAB_STORAGE_KEY)
-  );
+    window.localStorage.getItem(LEGACY_ACTIVE_TAB_STORAGE_KEY);
+
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as { tabId?: string; updatedAt?: number };
+    if (parsed?.tabId) {
+      if (!parsed.updatedAt || Date.now() - parsed.updatedAt <= ACTIVE_CONTROLLER_TTL_MS) {
+        return parsed.tabId;
+      }
+      window.localStorage.removeItem(ACTIVE_CONTROLLER_TAB_STORAGE_KEY);
+      window.localStorage.removeItem(LEGACY_ACTIVE_TAB_STORAGE_KEY);
+      return null;
+    }
+  } catch {
+    if (Date.now() - window.performance.timeOrigin <= ACTIVE_CONTROLLER_TTL_MS) {
+      return raw;
+    }
+  }
+
+  return raw;
 }
 
 function MailingListForm() {
@@ -354,7 +376,10 @@ export default function Home() {
     if (!tabId) {
       return;
     }
-    window.localStorage.setItem(ACTIVE_CONTROLLER_TAB_STORAGE_KEY, tabId);
+    window.localStorage.setItem(
+      ACTIVE_CONTROLLER_TAB_STORAGE_KEY,
+      JSON.stringify({ tabId, updatedAt: Date.now() }),
+    );
     window.localStorage.removeItem(LEGACY_ACTIVE_TAB_STORAGE_KEY);
     setActivePlaybackTabId(tabId);
   }
@@ -599,6 +624,46 @@ export default function Home() {
       window.removeEventListener("storage", syncActiveTab);
     };
   }, []);
+
+  useEffect(() => {
+    if (!tabId || !session?.is_active || !isPlaying || getStoredActiveControllerTab() !== tabId) {
+      return;
+    }
+
+    const heartbeat = window.setInterval(() => {
+      window.localStorage.setItem(
+        ACTIVE_CONTROLLER_TAB_STORAGE_KEY,
+        JSON.stringify({ tabId, updatedAt: Date.now() }),
+      );
+      setActivePlaybackTabId(tabId);
+    }, 4000);
+
+    return () => window.clearInterval(heartbeat);
+  }, [isPlaying, session?.is_active, tabId]);
+
+  useEffect(() => {
+    function refreshControllerLease() {
+      if (!tabId) {
+        return;
+      }
+      const activeTab = getStoredActiveControllerTab();
+      if (!activeTab) {
+        setActivePlaybackTabId(null);
+        return;
+      }
+      setActivePlaybackTabId(activeTab);
+      if (document.visibilityState === "visible" && activeTab === tabId && sessionRef.current?.is_active) {
+        claimActiveTab();
+      }
+    }
+
+    window.addEventListener("pageshow", refreshControllerLease);
+    document.addEventListener("visibilitychange", refreshControllerLease);
+    return () => {
+      window.removeEventListener("pageshow", refreshControllerLease);
+      document.removeEventListener("visibilitychange", refreshControllerLease);
+    };
+  }, [tabId]);
 
   useEffect(() => {
     sessionRef.current = session;
