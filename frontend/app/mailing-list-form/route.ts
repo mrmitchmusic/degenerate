@@ -1,8 +1,6 @@
 const BREVO_FORM_URL =
   "https://0a026ca3.sibforms.com/serve/MUIFADeSGI6f9MdcaIxws8gsQIhKTdNbBFk31R6KC5u6VSSeksoqqttCBdD6F0dfuctR_kTZ-QvCMRucy1ILGwm7wf9HS-t8DF8fGsd214O7uIvqCuxF5JM9vqdNWscE2S0y2zpIvBdlOD-dWNRIqqFmSForYiPN_pTk6oiPh0UfgHgMyI7-CwkwSr_PvGsaG-fXlS6cMzVSgNMo";
 const BREVO_FORM_BASE_URL = "https://0a026ca3.sibforms.com/";
-const LOCAL_FORM_ACTION = "/mailing-list-form";
-
 export const dynamic = "force-dynamic";
 
 const injectedStyle = `
@@ -140,7 +138,7 @@ const injectedStyle = `
   </style>
 `;
 
-function transformBrevoHtml(html: string) {
+function transformBrevoHtml(html: string, localFormAction: string) {
   const withBase = html.includes("</head>")
     ? html.replace("</head>", `<base href="${BREVO_FORM_BASE_URL}">${injectedStyle}</head>`)
     : `<base href="${BREVO_FORM_BASE_URL}">${injectedStyle}${html}`;
@@ -153,11 +151,11 @@ function transformBrevoHtml(html: string) {
     .replace(/<div style="padding:\s*8px 0;">\s*<div[\s\S]*?sib-image-form-block[\s\S]*?<\/div>\s*<\/div>/i, "")
     .replace(/Enter your email address to subscribe/gi, "Email Address")
     .replace(/placeholder="EMAIL"/gi, 'placeholder="user@domain.com"')
-    .replace(/<form([^>]*id="sib-form"[^>]*)action=""/i, `<form$1action="${LOCAL_FORM_ACTION}"`)
+    .replace(/<form([^>]*id="sib-form"[^>]*)action=""/i, `<form$1action="${localFormAction}"`)
     .replace(/>\s*SUBSCRIBE\s*</g, ">Subscribe<");
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const response = await fetch(BREVO_FORM_URL, {
       cache: "no-store",
@@ -171,7 +169,9 @@ export async function GET() {
     }
 
     const html = await response.text();
-    return new Response(transformBrevoHtml(html), {
+    const localFormAction = `${new URL(request.url).origin}/mailing-list-form`;
+
+    return new Response(transformBrevoHtml(html, localFormAction), {
       headers: {
         "Content-Type": "text/html; charset=utf-8",
         "Cache-Control": "no-store",
