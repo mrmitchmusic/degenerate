@@ -211,12 +211,18 @@ const injectedScript = `
         });
       };
 
-      document.addEventListener('DOMContentLoaded', applyMitchMailingListSkin);
-      window.addEventListener('load', applyMitchMailingListSkin);
-      new MutationObserver(applyMitchMailingListSkin).observe(document.documentElement, {
-        childList: true,
-        subtree: true,
-      });
+      let attempts = 0;
+      const maxAttempts = 20;
+      const interval = window.setInterval(() => {
+        applyMitchMailingListSkin();
+        attempts += 1;
+        if (attempts >= maxAttempts || document.querySelector('.mitch-mailing-list-copy')) {
+          window.clearInterval(interval);
+        }
+      }, 400);
+
+      document.addEventListener('DOMContentLoaded', applyMitchMailingListSkin, { once: true });
+      window.addEventListener('load', applyMitchMailingListSkin, { once: true });
     })();
   </script>
 `;
