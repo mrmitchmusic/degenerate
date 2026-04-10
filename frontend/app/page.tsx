@@ -1734,7 +1734,7 @@ export default function Home() {
       )}
 
       {isWaitingInQueue && session && (
-        <div className="queue-overlay">
+        <div className="queue-overlay queue-overlay-passive">
           <div className="queue-window">
             <WindowTitleBar title="System Busy" closable={false} staticTitle />
             <div className="queue-body">
