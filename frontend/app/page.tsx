@@ -226,6 +226,87 @@ function getStoredActiveControllerTab() {
   );
 }
 
+function MailingListForm() {
+  const [email, setEmail] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [status, setStatus] = useState<"idle" | "success" | "error">("idle");
+  const [message, setMessage] = useState("");
+
+  async function handleSubmit(event: { preventDefault(): void }) {
+    event.preventDefault();
+
+    if (!email.trim()) {
+      setStatus("error");
+      setMessage("Submission failed. Retry.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setStatus("idle");
+    setMessage("");
+
+    try {
+      const formData = new FormData();
+      formData.append("EMAIL", email.trim());
+      formData.append("locale", "en");
+      formData.append("email_address_check", "");
+
+      const response = await fetch("/mailing-list-form?isAjax=1", {
+        method: "POST",
+        body: formData,
+      });
+
+      const payload = (await response.json()) as {
+        success?: boolean;
+        message?: string;
+        errors?: Record<string, string>;
+      };
+
+      if (payload.success) {
+        setStatus("success");
+        setMessage("Subscription successful.");
+        setEmail("");
+      } else {
+        setStatus("error");
+        setMessage(payload.errors?.EMAIL || payload.message || "Submission failed. Retry.");
+      }
+    } catch {
+      setStatus("error");
+      setMessage("Submission failed. Retry.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="mailing-list-native">
+      <div className="mailing-list-copy">Register email address to receive system updates.</div>
+      <form className="mailing-list-form" onSubmit={handleSubmit}>
+        <label className="mailing-list-label" htmlFor="mailing-list-email">
+          Email Address
+        </label>
+        <input
+          id="mailing-list-email"
+          className="mailing-list-input"
+          type="email"
+          name="EMAIL"
+          placeholder="user@domain.com"
+          autoComplete="email"
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+          required
+        />
+        <div className="mailing-list-actions">
+          <button type="submit" className="system-button" disabled={isSubmitting}>
+            {isSubmitting ? "Submitting..." : "Subscribe"}
+          </button>
+        </div>
+        {status !== "idle" && <div className={`mailing-list-message mailing-list-message-${status}`}>{message}</div>}
+      </form>
+    </div>
+  );
+}
+
 export default function Home() {
   const [desktopScale, setDesktopScale] = useState(1);
   const [isMobileLayout, setIsMobileLayout] = useState(false);
@@ -1394,11 +1475,7 @@ export default function Home() {
               <section className="mobile-panel">
                 <WindowTitleBar title="Mailing List" onClose={() => setMailingListOpen(false)} staticTitle />
                 <div className="window-body mobile-panel-body mailing-list-panel-body">
-                  <iframe
-                    title="Mailing List"
-                    src="/mailing-list-form"
-                    className="mailing-list-frame"
-                  />
+                  <MailingListForm />
                 </div>
               </section>
             )}
@@ -1635,11 +1712,7 @@ export default function Home() {
           onClose={() => setMailingListOpen(false)}
         >
           <div className="mailing-list-panel-body">
-            <iframe
-              title="Mailing List"
-              src="/mailing-list-form"
-              className="mailing-list-frame"
-            />
+            <MailingListForm />
           </div>
         </DesktopWindow>
       )}
