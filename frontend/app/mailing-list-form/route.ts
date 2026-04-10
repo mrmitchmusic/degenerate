@@ -152,7 +152,6 @@ function transformBrevoHtml(html: string) {
     .replace(/<div style="padding:\s*8px 0;">\s*<div[\s\S]*?sib-image-form-block[\s\S]*?<\/div>\s*<\/div>/i, "")
     .replace(/Enter your email address to subscribe/gi, "Email Address")
     .replace(/placeholder="EMAIL"/gi, 'placeholder="user@domain.com"')
-    .replace(/<form([\s\S]*?)action=""/i, `<form$1action="${BREVO_FORM_URL}"`)
     .replace(/>\s*SUBSCRIBE\s*</g, ">Subscribe<");
 }
 
@@ -192,6 +191,73 @@ export async function GET() {
       status: 502,
       headers: {
         "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "no-store",
+      },
+    });
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const incomingUrl = new URL(request.url);
+    const forwardUrl = new URL(BREVO_FORM_URL);
+
+    for (const [key, value] of incomingUrl.searchParams.entries()) {
+      forwardUrl.searchParams.set(key, value);
+    }
+
+    const incomingFormData = await request.formData();
+    const forwardFormData = new FormData();
+
+    for (const [key, value] of incomingFormData.entries()) {
+      forwardFormData.append(key, value);
+    }
+
+    const response = await fetch(forwardUrl.toString(), {
+      method: "POST",
+      body: forwardFormData,
+      cache: "no-store",
+      headers: {
+        "User-Agent": "MitchOS88/1.0",
+        Origin: BREVO_FORM_BASE_URL,
+        Referer: BREVO_FORM_URL,
+      },
+    });
+
+    const contentType = response.headers.get("content-type") || "text/plain; charset=utf-8";
+    const responseText = await response.text();
+
+    return new Response(responseText, {
+      status: response.status,
+      headers: {
+        "Content-Type": contentType,
+        "Cache-Control": "no-store",
+      },
+    });
+  } catch {
+    const isAjax = new URL(request.url).searchParams.get("isAjax") === "1";
+
+    if (isAjax) {
+      return Response.json(
+        {
+          success: false,
+          errors: {
+            EMAIL: "Submission failed. Retry.",
+          },
+        },
+        {
+          status: 502,
+          headers: {
+            "Cache-Control": "no-store",
+          },
+        },
+      );
+    }
+
+    return new Response("Unable to submit mailing list form.", {
+      status: 502,
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
         "Cache-Control": "no-store",
       },
     });
