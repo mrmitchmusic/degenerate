@@ -240,12 +240,14 @@ function getStoredActiveControllerTab() {
       return null;
     }
   } catch {
-    if (Date.now() - window.performance.timeOrigin <= ACTIVE_CONTROLLER_TTL_MS) {
-      return raw;
-    }
+    window.localStorage.removeItem(ACTIVE_CONTROLLER_TAB_STORAGE_KEY);
+    window.localStorage.removeItem(LEGACY_ACTIVE_TAB_STORAGE_KEY);
+    return null;
   }
 
-  return raw;
+  window.localStorage.removeItem(ACTIVE_CONTROLLER_TAB_STORAGE_KEY);
+  window.localStorage.removeItem(LEGACY_ACTIVE_TAB_STORAGE_KEY);
+  return null;
 }
 
 function MailingListForm() {
@@ -623,6 +625,14 @@ export default function Home() {
     return () => {
       window.removeEventListener("storage", syncActiveTab);
     };
+  }, []);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setActivePlaybackTabId(getStoredActiveControllerTab());
+    }, 2000);
+
+    return () => window.clearInterval(interval);
   }, []);
 
   useEffect(() => {
