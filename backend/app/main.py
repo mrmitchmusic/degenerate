@@ -494,3 +494,16 @@ async def get_admin_overview(
 ) -> AdminOverview:
     _require_admin_token(admin_token)
     return await service.admin_overview()
+
+
+@app.get("/admin/download")
+async def download_current_audio(
+    admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
+) -> FileResponse:
+    _require_admin_token(admin_token)
+    state = await service.global_state()
+    return FileResponse(
+        service.state_store.audio_path,
+        media_type="audio/wav",
+        filename=state.filename,
+    )
