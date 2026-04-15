@@ -372,7 +372,8 @@ export default function Home() {
   const desktopScaleRef = useRef(1);
   const activeSessionId = session?.session_id ?? null;
   const sameSessionActiveInAnotherTab = Boolean(session?.is_active && tabId && activePlaybackTabId && activePlaybackTabId !== tabId);
-  const controlsDisabled = Boolean(!session?.is_active || state?.status === "dead" || sameSessionActiveInAnotherTab);
+  const otherTabBlocksPlayback = Boolean(sameSessionActiveInAnotherTab && !isMobileLayout);
+  const controlsDisabled = Boolean(!session?.is_active || state?.status === "dead" || otherTabBlocksPlayback);
 
   function claimActiveTab() {
     if (!tabId) {
@@ -1043,7 +1044,7 @@ export default function Home() {
     if (!hasEnteredSystem || !session?.is_active || !activeSessionId || isPlaying || state?.status === "dead") {
       return;
     }
-    if (sameSessionActiveInAnotherTab) {
+    if (otherTabBlocksPlayback) {
       setPlaybackError("This session is already active in another tab.");
       setAudioDebug("blocked: active in another tab");
       return;
@@ -1054,7 +1055,7 @@ export default function Home() {
 
     autoplayAttemptedSessionRef.current = activeSessionId;
     void handlePlay(true);
-  }, [activeSessionId, hasEnteredSystem, isPlaying, sameSessionActiveInAnotherTab, session?.is_active, state?.status]);
+  }, [activeSessionId, hasEnteredSystem, isPlaying, otherTabBlocksPlayback, session?.is_active, state?.status]);
 
   useEffect(() => {
     if (!hasEnteredSystem || !session?.is_active) {
@@ -1079,7 +1080,7 @@ export default function Home() {
   }, [pauseElapsed, activeSessionId, session]);
 
   useEffect(() => {
-    if (sameSessionActiveInAnotherTab) {
+    if (otherTabBlocksPlayback) {
       setPlaybackError("This session is already active in another tab.");
       setIsPlaying(false);
       audioRef.current?.pause();
@@ -1089,7 +1090,7 @@ export default function Home() {
     if (playbackError === "This session is already active in another tab.") {
       setPlaybackError(null);
     }
-  }, [playbackError, sameSessionActiveInAnotherTab]);
+  }, [otherTabBlocksPlayback, playbackError]);
 
   useEffect(() => {
     const handleUnload = () => {
@@ -1171,7 +1172,9 @@ export default function Home() {
       return;
     }
 
-    if (sameSessionActiveInAnotherTab) {
+    if (sameSessionActiveInAnotherTab && isMobileLayout && tabId) {
+      claimActiveTab();
+    } else if (otherTabBlocksPlayback) {
       setPlaybackError("This session is already active in another tab.");
       setAudioDebug("blocked: active in another tab");
       return;
@@ -1528,7 +1531,7 @@ export default function Home() {
                 <div className="player-block">
                   <div>Pause Remaining: {Math.max(0, 30 - Math.floor(pauseElapsed))}s</div>
                   <div>Status: {state?.status === "dead" ? "File Dead" : session?.is_active ? "Active" : "Waiting"}</div>
-                  {sameSessionActiveInAnotherTab && <div>This session is already active in another tab.</div>}
+                  {otherTabBlocksPlayback && <div>This session is already active in another tab.</div>}
                   {playbackError && <div>{playbackError}</div>}
                 </div>
               </div>
@@ -1740,7 +1743,7 @@ export default function Home() {
           <div className="player-block">
             <div>Pause Remaining: {Math.max(0, 30 - Math.floor(pauseElapsed))}s</div>
             <div>Status: {state?.status === "dead" ? "File Dead" : session?.is_active ? "Active" : "Waiting"}</div>
-            {sameSessionActiveInAnotherTab && <div>This session is already active in another tab.</div>}
+            {otherTabBlocksPlayback && <div>This session is already active in another tab.</div>}
           </div>
         </div>
       </DesktopWindow>
