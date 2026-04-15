@@ -33,6 +33,7 @@ function formatDateTime(value: number | null) {
 export default function AdminPage() {
   const [adminToken, setAdminToken] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [overview, setOverview] = useState<AdminOverview | null>(null);
 
@@ -83,6 +84,47 @@ export default function AdminPage() {
     void loadOverview(adminToken);
   }, [adminToken]);
 
+  async function downloadCurrentTrack() {
+    const token = adminToken;
+    if (!token) {
+      setError("Enter your admin token first.");
+      return;
+    }
+
+    setIsDownloading(true);
+    setError(null);
+    try {
+      const response = await fetch(getApiUrl("/admin/download"), {
+        headers: {
+          "X-Admin-Token": token,
+        },
+      });
+
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as { detail?: string } | null;
+        throw new Error(payload?.detail ?? "Failed to download current track");
+      }
+
+      const blob = await response.blob();
+      const disposition = response.headers.get("Content-Disposition") ?? "";
+      const match = disposition.match(/filename="?([^"]+)"?/i);
+      const filename = match?.[1] ?? overview?.state.filename ?? "current-track.wav";
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(objectUrl);
+      window.localStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, token);
+    } catch (downloadError) {
+      setError(downloadError instanceof Error ? downloadError.message : "Failed to download current track");
+    } finally {
+      setIsDownloading(false);
+    }
+  }
+
   const queueRows = useMemo(() => overview?.queue ?? [], [overview]);
 
   return (
@@ -110,6 +152,14 @@ export default function AdminPage() {
             <div className="upload-actions">
               <button type="button" className="system-button" disabled={isLoading} onClick={() => void loadOverview()}>
                 {isLoading ? "Loading..." : "Refresh Admin View"}
+              </button>
+              <button
+                type="button"
+                className="system-button"
+                disabled={isDownloading}
+                onClick={() => void downloadCurrentTrack()}
+              >
+                {isDownloading ? "Downloading..." : "Download Current Track"}
               </button>
               <Link href="/upload" className="upload-link">
                 Upload Track
